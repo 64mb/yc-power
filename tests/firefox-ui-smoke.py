@@ -117,6 +117,23 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'expand-state':
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
+        disclosure = 'Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud")).find(e=>e.querySelector("a").getAttribute("href").endsWith("cloud-beta")).querySelector("button")'
+        assert not driver.evaluate('return (' + disclosure + ').disabled;')
+        driver.click(disclosure)
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', 'x': 900, 'y': 500}]}]})
+        driver.wait('const p=fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"];return Array.isArray(p.expandedClouds)&&!p.expandedClouds.includes("cloud-beta");')
+        assert driver.evaluate('return getComputedStyle((' + disclosure + ').parentElement.querySelector(".ycp-row-action")).opacity;') == '0'
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=expand-state'})
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
+        assert driver.evaluate('return (' + disclosure + ').getAttribute("aria-expanded");') == 'false'
+        driver.evaluate('history.pushState(null,"","/folders/folder-beta/dashboard");return true;')
+        driver.wait('return (' + disclosure + ').getAttribute("aria-expanded")==="true";')
+        driver.click(disclosure)
+        driver.evaluate('browser.storage.local.set({compactDensity:true});return true;')
+        assert driver.evaluate('return (' + disclosure + ').getAttribute("aria-expanded");') == 'false'
+        return {'scenario': scenario, 'collapse': 'preserved on reload', 'navigation': 'reveals target once', 'mouseFocus': 'does not retain actions', 'busyDisclosure': 'enabled'}
     if scenario == 'empty-cache':
         driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-header")&&!r.querySelector(".ycp-cloud")&&Array.isArray(fixture.memory["yc-power:"+location.origin+":catalog"])&&fixture.memory["yc-power:"+location.origin+":catalog"].length===0;')
         return {'scenario': scenario, 'cache': 'cleared after confirmed empty native list'}
@@ -136,7 +153,7 @@ def exercise(driver, origin, scenario):
             return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'replaced with fresh folders'}
         if scenario == 'delayed-cancel':
             driver.wait('return fixture.expansionClicks===1;')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Original sidebar")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Default sidebar")')
             driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
             driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
 
@@ -187,7 +204,7 @@ def exercise(driver, origin, scenario):
     screenshot = driver.command('WebDriver:TakeScreenshot', {'full': False, 'scroll': False})
     value, _, _ = pixel(screenshot, icon['x'], icon['y'])
     assert all(abs(a - b) < 6 for a, b in zip(value, (52, 143, 255))), ('Shared SVG disappeared', value)
-    driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("button[title=\\"Original sidebar\\"]")')
+    driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("button[title=\\"Default sidebar\\"]")')
     driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
     alignment = driver.evaluate('const a=document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button").getBoundingClientRect();const b=document.querySelector("#native-toggle").getBoundingClientRect();return Math.abs((a.y+a.height/2)-(b.y+b.height/2));')
     assert alignment < 2, alignment
@@ -225,7 +242,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'failed']:
+            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

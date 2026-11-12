@@ -30,6 +30,24 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
   let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false;
   const expanded = new Set();
+  let revealedRoute = null, observedRouteTransition = null;
+  function restoreExpanded() {
+    expanded.clear();
+    const saved = Array.isArray(state.expandedClouds) ? state.expandedClouds : state.mine;
+    saved.forEach(id => { if (typeof id === 'string') expanded.add(id); });
+  }
+  function rememberExpanded() { state.expandedClouds = [...expanded]; }
+  function revealCurrentRoute() {
+    const transition = `${key}:${location.href}`;
+    if (observedRouteTransition !== transition) { observedRouteTransition = transition; revealedRoute = null; }
+    if (revealedRoute === transition) return;
+    const active = Core.route(location.href, location.origin);
+    if (!active) { revealedRoute = transition; return; }
+    const cloud = scopedClouds().find(cloud => active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id));
+    if (!cloud) return;
+    revealedRoute = transition;
+    if (!expanded.has(cloud.id)) { expanded.add(cloud.id); rememberExpanded(); save(); }
+  }
   const catalogKey = `yc-power:${location.origin}:catalog`;
   let catalogSaveTimer;
   function saveCatalog() {
@@ -100,7 +118,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     key = nextKey;
     state = {...defaults(), ...structuredClone(preferences[key] || {}), clouds};
     state.width = Math.min(440, Math.max(1, Number(state.width) || 360));
-    edit = null; expanded.clear(); state.mine.forEach(id => expanded.add(id));
+    edit = null; restoreExpanded();
     if (initialize) initializeMine();
     applyWidth(); rememberLayout();
   }
@@ -111,7 +129,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     if (state.initialized) return;
     const active = Core.route(location.href, location.origin);
     const current = scopedClouds().find(c => active && (active.type === 'cloud' ? active.id === c.id : active.cloudId === c.id || c.folders.some(f => f.id === active.id)));
-    if (current) { state.mine = [current.id]; state.initialized = true; expanded.add(current.id); save(); }
+    if (current) { state.mine = [current.id]; state.initialized = true; expanded.add(current.id); rememberExpanded(); save(); }
   }
   function display(item, parent) {
     return state.custom[`${item.type}:${item.id}`]?.label || Core.label(item.name, parent?.name);
@@ -328,6 +346,8 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       const cloudKey = Core.scopeKey(location.origin, cloud.organizationId);
       const settings = structuredClone(cloudSettings(cloud));
       const mine = settings.mine.includes(cloud.id);
+      const savedExpanded = Array.isArray(settings.expandedClouds) ? settings.expandedClouds : settings.mine;
+      settings.expandedClouds = mine ? savedExpanded : [...new Set([...savedExpanded, cloud.id])];
       settings.mine = mine ? settings.mine.filter(id => id !== cloud.id) : [...settings.mine, cloud.id];
       settings.initialized = true;
       preferenceSync.stage(cloudKey, settings);
@@ -339,6 +359,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     state.mine = mine ? state.mine.filter(id => id !== cloud.id) : [...state.mine, cloud.id];
     state.initialized = true;
     if (!mine) expanded.add(cloud.id);
+    rememberExpanded();
     save(); render(); decorateNative();
     if (!mine && !cloud.folders.length) queueFolderScan(cloud.id);
   }
@@ -355,10 +376,11 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   function Item({item, parent}) {
     const current = item.type === 'folder' && location.pathname.split('/').includes(item.id);
     return <div className={`ycp-row ycp-${item.type}`} data-current={current || undefined}>
-      {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={expanded.has(item.id)} disabled={busy} onClick={() => {
+      {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={expanded.has(item.id)} onClick={event => {
         if (expanded.has(item.id)) expanded.delete(item.id);
         else { expanded.add(item.id); if (!item.folders.length) queueFolderScan(item.id); }
-        render();
+        if (event.detail > 0) event.currentTarget.blur();
+        rememberExpanded(); save(); render();
       }}><Icon data={expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
       {item.type === 'folder' && <span className="ycp-indent"/>}
       <span className="ycp-item-icon" style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? Cloud : Folder} size={16}/></span>
@@ -462,7 +484,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     aside.style.setProperty('--ycp-width', `${panelWidth}px`);
   }
   function onResize() { applyWidth(); render(); }
-  function render() { if (root && !stopped) { root.render(<Panel/>); queueExpandedFolders(); scheduleScans(); } }
+  function render() { if (root && !stopped) { revealCurrentRoute(); root.render(<Panel/>); queueExpandedFolders(); scheduleScans(); } }
   function refreshTheme() {
     if (!aside) return;
     const computed = getComputedStyle(aside);
@@ -535,7 +557,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     if (activeChanged) {
       state = {...defaults(), ...structuredClone(preferences[key] || {}), clouds: state.clouds};
       state.width = Math.min(440, Math.max(1, Number(state.width) || 360));
-      expanded.clear(); state.mine.forEach(id => expanded.add(id));
+      restoreExpanded();
       applyWidth(); render();
     }
     decorateNative();
@@ -564,7 +586,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       state.width = Math.min(440, Math.max(1, Number(stored?.width ?? layout?.width) || 360));
     } catch (_) { /* default settings remain usable if storage is unavailable */ }
     window.addEventListener('resize', onResize);
-    state.mine.forEach(id => expanded.add(id));
+    restoreExpanded();
     if (state.clouds.length) syncOrganization();
     mount();
     themeObserver = new MutationObserver(() => { refreshTheme(); decorateNative(); render(); });

@@ -15,6 +15,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Open **All clouds** to use the original console tree and add clouds from it, or return to the native sidebar
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
+- Remember expanded clouds and automatically reveal the cloud you navigate to
 - Keep selected clouds, labels, colors, and sidebar width separate for every organization
 - Use compact Gravity UI actions and drag the sidebar edge to adjust its width, with an automatic minimum that keeps the actions on one line and a 440 px maximum
 - Start with the current cloud automatically selected when it can be identified on first use
