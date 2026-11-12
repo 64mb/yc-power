@@ -10,7 +10,8 @@ YC Power brings your frequently used clouds and folders together in a compact si
 
 ## Make the console yours
 
-- Add or remove clouds from **My clouds** and refresh the list when the console changes
+- Add or remove clouds from **My clouds**; refresh clouds and their folders together from the header
+- Display the previous local catalog immediately while refreshing it in the background
 - Open **All clouds** to use the original console tree and add clouds from it, or return to the native sidebar
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
@@ -31,7 +32,7 @@ Screenshots use the real console interface with demo cloud and folder names. The
 
 YC Power supports desktop Firefox 140 and later and compatible versions of Zen. Android has not been tested.
 
-By default the extension runs only on `https://console.yandex.cloud`. Use the extension icon to add other HTTPS console origins. The browser requests permission for each added origin. Enter an origin without a path, port, or parameters; an empty list disables the extension on all consoles. See [privacy.md](privacy.md) for details about data and permissions.
+By default the extension runs only on `https://console.yandex.cloud`. Use the extension icon to add other HTTPS console origins. The browser requests permission for each added origin. Enter an origin without a path, port, or parameters; an empty list disables the extension on all consoles. See [PRIVACY.md](PRIVACY.md) for details about data and permissions.
 
 ## Install
 

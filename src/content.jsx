@@ -30,6 +30,13 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
   let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false;
   const expanded = new Set();
+  const catalogKey = `yc-power:${location.origin}:catalog`;
+  let catalogSaveTimer;
+  function saveCatalog() {
+    clearTimeout(catalogSaveTimer);
+    const snapshot = Core.catalogCache(state.clouds, location.origin);
+    catalogSaveTimer = setTimeout(() => { storage?.set({[catalogKey]: snapshot}).catch(() => {}); }, 150);
+  }
   const loadedFolders = new Set(), attemptedFolders = new Set(), pendingFolders = new Map();
   let scanGeneration = 0, queueScheduled = false;
   const folderKey = id => `${key}:${id}`;
@@ -239,7 +246,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     const scanTree = tree, generation = scanGeneration, scanKey = key;
     const valid = () => !stopped && tree === scanTree && tree.isConnected && !native && generation === scanGeneration && scanKey === key;
     const list = tree.querySelector('.cloud-tree-list');
-    if (!list) { allOpen = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
+    if (!list) { if (!state.mine.length) allOpen = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
     if (tree.querySelector('input')?.value) {
       statusKey = 'clearSearch'; allOpen = true; setNativeVisibility(); render(); return;
     }
@@ -260,7 +267,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
           if (row) {
             found = true;
             const expand = row.querySelector('.cloud-tree-list-item__expand-button');
-            const opened = row.matches('.cloud-tree-list-item__item_opened, .cloud-tree-list-item_opened, [aria-expanded="true"], [aria-busy="true"]') || row.closest('li')?.matches('.cloud-tree-list-item_opened, [aria-expanded="true"]') || row.querySelector('.cloud-tree-list-item__expand-icon_expanded, .cloud-tree-list-item__item_opened, .cloud-tree-list-item_opened, [aria-expanded="true"], [aria-busy="true"], [role="progressbar"], .g-spin');
+            const opened = row.matches('[aria-expanded="true"], [aria-busy="true"]') || row.querySelector('.cloud-tree-list-item__expand-icon_expanded, [aria-expanded="true"], [aria-busy="true"], [role="progressbar"], .g-spin');
             if (expand && !opened) { tree.removeAttribute('inert'); expand.click(); setNativeVisibility(); }
             let stable = 0, previousSignature = '';
             for (let attempt = 0; attempt < 60; attempt++) {
@@ -280,6 +287,9 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
               if (attempt >= 14 && stable >= 5) break;
               if (attempt === 59) throw new Error('Folder loading did not settle');
             }
+            for (const [rowKey, item] of rows) {
+              if (item.type === 'folder' && item.cloudId === target) rows.delete(rowKey);
+            }
             for (const item of readRows(list)) collectRow(rows, item);
           }
         }
@@ -287,16 +297,25 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
         top = list.scrollTop + Math.max(36, list.clientHeight - 108);
       }
       if (!valid()) return;
-      state.clouds = Core.catalog([...rows.values()], state.clouds, found ? target : undefined);
+      const freshRows = [...rows.values()];
+      const confirmedEmpty = !target && !tree.querySelector('[role="progressbar"], .g-spin, [aria-busy="true"], [role="alert"]') && /no clouds|нет облаков|облака не найдены|не найдено облаков|no results|ничего не найдено/i.test(list.textContent);
+      if (freshRows.some(row => row.type === 'cloud')) state.clouds = Core.catalog(freshRows, state.clouds, found ? target : undefined);
+      else if (confirmedEmpty) state.clouds = [];
+      saveCatalog();
       if (target && found) loadedFolders.add(folderKey(target));
       scanReady = true;
       syncOrganization(); initializeMine();
       statusKey = 'cloudCount'; statusArgs = {count: scopedClouds().length};
       if (target && !found) statusKey = 'notFound';
+      if (!target) {
+        for (const cloud of scopedClouds()) {
+          if (state.mine.includes(cloud.id)) queueFolderScan(cloud.id, true);
+        }
+      }
     } catch (error) {
       if (!valid()) return;
       console.warn('YC Power: tree scan failed', error);
-      statusKey = 'scanFailed'; allOpen = true;
+      statusKey = 'scanFailed'; if (!state.mine.length) allOpen = true;
     } finally {
       if (target && !valid()) attemptedFolders.delete(`${scanKey}:${target}`);
       if (list.isConnected) list.scrollTop = originalScroll;
@@ -346,7 +365,6 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       <a className="ycp-link" href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
-      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" disabled={busy} aria-label={t('refreshFolders')} title={t('refreshFolders')} onClick={() => queueFolderScan(item.id, true)}><Icon data={ArrowRotateRight} size={16}/></Button>}
       {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(state.mine.includes(item.id) ? 'remove' : 'add')} title={t(state.mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={state.mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
       <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} title={t('customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
@@ -390,6 +408,8 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
           <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
         </div>
 
+        {(busy || statusKey !== 'cloudCount') && <div className="ycp-status" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
+
         <div className="ycp-mine">
           {!mine.length && <div className="ycp-note">{t('empty')}</div>}
           {mine.map(cloud => {
@@ -398,7 +418,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
               <Item item={cloud}/>
               {expanded.has(cloud.id) && <>
                 {folders.map(folder => <Item key={folder.id} item={folder} parent={cloud}/>)}
-                {!cloud.folders.length && <div className="ycp-note">{t(loadedFolders.has(folderKey(cloud.id)) ? 'noFolders' : 'loadingFolders')}</div>}
+                {!cloud.folders.length && loadedFolders.has(folderKey(cloud.id)) && <div className="ycp-note">{t('noFolders')}</div>}
               </>}
             </section>;
           })}
@@ -414,7 +434,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
           <EditActions/>
         </form>}
         <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
-        {(busy || statusKey !== 'cloudCount') && <div className="ycp-footer" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
+
       </>}
       <div ref={measureRef} className="ycp-action-measure" aria-hidden="true"><EditActions measurement/></div>
       <div className="ycp-resize" role="separator" tabIndex={0} aria-label={t('width')} aria-orientation="vertical" aria-valuemin={minimumWidth} aria-valuemax={440} aria-valuenow={panelWidth} onKeyDown={event => {
@@ -538,12 +558,14 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       if (key.startsWith(`${prefix}id:`)) {
         try { selectedOrganizationId = decodeURIComponent(key.slice(`${prefix}id:`.length)); } catch (_) { selectedOrganizationId = null; }
       }
+      state.clouds = Core.catalogCache(storedPreferences[catalogKey], location.origin);
       const stored = preferences[key];
-      if (stored && Array.isArray(stored.mine)) state = {...state, ...stored, clouds: []};
+      if (stored && Array.isArray(stored.mine)) state = {...state, ...stored, clouds: state.clouds};
       state.width = Math.min(440, Math.max(1, Number(stored?.width ?? layout?.width) || 360));
     } catch (_) { /* default settings remain usable if storage is unavailable */ }
     window.addEventListener('resize', onResize);
     state.mine.forEach(id => expanded.add(id));
+    if (state.clouds.length) syncOrganization();
     mount();
     themeObserver = new MutationObserver(() => { refreshTheme(); decorateNative(); render(); });
     themeObserver.observe(document.body, {attributes: true, attributeFilter: ['class', 'style']});

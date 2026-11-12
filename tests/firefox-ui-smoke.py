@@ -117,6 +117,9 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'empty-cache':
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-header")&&!r.querySelector(".ycp-cloud")&&Array.isArray(fixture.memory["yc-power:"+location.origin+":catalog"])&&fixture.memory["yc-power:"+location.origin+":catalog"].length===0;')
+        return {'scenario': scenario, 'cache': 'cleared after confirmed empty native list'}
     if scenario == 'failed':
         driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-header")&&r.textContent.includes("Could not read");')
         return {'scenario': scenario, 'defaultView': 'my clouds retained after scan failure'}
@@ -126,6 +129,11 @@ def exercise(driver, origin, scenario):
         assert widths and all(abs(width - 320) < 1 for width in widths), widths
         return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
     if scenario.startswith('delayed'):
+        if scenario == 'delayed-cache':
+            driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
+            driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"));', timeout=25)
+            assert driver.evaluate('return fixture.expansionClicks;') == 1
+            return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'replaced with fresh folders'}
         if scenario == 'delayed-cancel':
             driver.wait('return fixture.expansionClicks===1;')
             driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Original sidebar")')
@@ -171,7 +179,7 @@ def exercise(driver, origin, scenario):
         driver.evaluate('browser.storage.local.set({compactDensity:false});return true;')
         driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
     geometry = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const row=r.querySelector(".ycp-cloud");const centers=Array.from(row.children).map(e=>{const b=e.getBoundingClientRect();return b.y+b.height/2});return {delta:Math.max(...centers)-Math.min(...centers),refresh:Array.from(row.querySelectorAll("button")).some(b=>b.title==="Refresh folders"),footer:!!r.querySelector(".ycp-footer")};')
-    assert geometry['delta'] < 1 and geometry['refresh'] and not geometry['footer'], geometry
+    assert geometry['delta'] < 1 and not geometry['refresh'] and not geometry['footer'], geometry
     driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-toggle button")')
     tree_style = driver.evaluate('const s=getComputedStyle(document.querySelector(".cloud-tree-list-container"));return {visibility:s.visibility,opacity:s.opacity};')
     assert tree_style == {'visibility': 'visible', 'opacity': '1'}, tree_style
@@ -217,7 +225,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'multi-saved', 'failed']:
+            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

@@ -122,7 +122,27 @@
       },
     };
   }
-  const api = {label, color, route, catalog, annotateOrganizations, currentOrganization, scopeKey, preferenceSync, palettes};
+  function catalogCache(value, origin) {
+    if (!Array.isArray(value)) return [];
+    const text = value => typeof value === "string" && value.length <= 2048 ? value : undefined;
+    const item = (value, type) => {
+      if (!value || !text(value.id) || !text(value.name) || !text(value.href)) return null;
+      const parsed = route(value.href, origin);
+      if (!parsed || parsed.type !== type || parsed.id !== value.id) return null;
+      return {...parsed, name: value.name};
+    };
+    return value.flatMap(value => {
+      const cloud = item(value, "cloud");
+      if (!cloud) return [];
+      const organizationId = text(value.organizationId);
+      return [{...cloud, ...(organizationId ? {organizationId, organizationName: text(value.organizationName) || organizationId} : {}),
+        folders: (Array.isArray(value.folders) ? value.folders : []).flatMap(value => {
+          const folder = item(value, "folder");
+          return folder && (!folder.cloudId || folder.cloudId === cloud.id) ? [{...folder, cloudId: cloud.id}] : [];
+        })}];
+    });
+  }
+  const api = {label, color, route, catalog, annotateOrganizations, currentOrganization, scopeKey, preferenceSync, catalogCache, palettes};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.YCPowerCore = api;
 })(globalThis);

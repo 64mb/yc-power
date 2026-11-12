@@ -44,3 +44,17 @@ test('keeps a meaningful YC suffix when shortening folder names', () => {
   assert.equal(label('example-runners-yc-folder', 'yc-example-build-prod'), 'runners · yc');
   assert.equal(label('example-runners-yt-folder', 'yc-example-build-prod'), 'runners · yt');
 });
+
+test('catalog cache keeps validated routes and strips unrelated fields', () => {
+  const {catalogCache} = require('../core.js');
+  const result = catalogCache([null, {id: 'bad', name: 'Bad', href: 'https://example.net/clouds/bad'}, {
+    id: 'cloud-alpha', name: 'Alpha', href: '/clouds/cloud-alpha', organizationId: 'org-alpha', organizationName: 'Alpha organization', offset: 42, dom: 'discard',
+    folders: [{id: 'folder-alpha', name: 'Folder', href: '/clouds/cloud-alpha/folder-alpha', extra: true}, {id: 'folder-beta', name: 'Wrong parent', href: '/clouds/cloud-beta/folder-beta'}],
+  }], 'https://console.example.com');
+  assert.equal(result.length, 1);
+  assert.equal(result[0].offset, undefined);
+  assert.equal(result[0].dom, undefined);
+  assert.equal(result[0].folders.length, 1);
+  assert.equal(result[0].folders[0].extra, undefined);
+  assert.equal(result[0].folders[0].cloudId, 'cloud-alpha');
+});
