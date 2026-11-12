@@ -4,6 +4,7 @@ import {Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravi
 import {Plus, TrashBin, FloppyDisk, FolderTree, Clouds} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
+import {TooltipLayer} from './TooltipLayer.jsx';
 import {getLanguage, messages} from './options-i18n.js';
 
 const language = getLanguage();
@@ -91,12 +92,12 @@ function Settings() {
                             controlProps={{'aria-label': `${t.address} ${index + 1}`, spellCheck: false, autoComplete: 'off'}}
                             onUpdate={(value) => setHosts((current) => current.map((item, i) => i === index ? {...item, host: value} : item))}/>
                         <Button size="l" view={row.cloudOnly ? 'outlined-info' : 'flat-secondary'} className="domain-folder-toggle"
-                            disabled={loading || saving} title={row.cloudOnly ? t.cloudsOnly : t.foldersEnabled}
+                            disabled={loading || saving} data-ycp-tooltip={row.cloudOnly ? t.cloudsOnly : t.foldersEnabled}
                             aria-label={`${row.cloudOnly ? t.cloudsOnly : t.foldersEnabled} ${index + 1}`} selected={row.cloudOnly}
                             onClick={() => setHosts((current) => current.map((item, i) => i === index ? {...item, cloudOnly: !item.cloudOnly} : item))}>
                             <Icon data={row.cloudOnly ? Clouds : FolderTree} size={16}/>
                         </Button>
-                        <Button size="l" view="flat-secondary" disabled={loading || saving} title={t.remove} aria-label={`${t.remove} ${index + 1}`}
+                        <Button size="l" view="flat-secondary" disabled={loading || saving} data-ycp-tooltip={t.remove} aria-label={`${t.remove} ${index + 1}`}
                             onClick={() => setHosts((current) => current.filter((_, i) => i !== index))}><Icon data={TrashBin} size={16}/></Button>
                     </div>)}
                 </div>
@@ -116,4 +117,4 @@ function Settings() {
     </main>;
 }
 
-createRoot(document.getElementById('root')).render(<ThemeProvider theme="system" lang={language}><Settings/></ThemeProvider>);
+createRoot(document.getElementById('root')).render(<ThemeProvider theme="system" lang={language}><Settings/><TooltipLayer/></ThemeProvider>);

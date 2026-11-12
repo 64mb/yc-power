@@ -7,6 +7,7 @@ import '@gravity-ui/uikit/styles/styles.css';
 import './panel.css';
 import Core from '../core.js';
 import I18n from '../panel-i18n.js';
+import {TooltipLayer} from './TooltipLayer.jsx';
 
 const gravityCSS = __YCP_GRAVITY_CSS__;
 const folderIcons = {folder: Folder, terminal: Terminal, server: Server, database: Database, briefcase: Briefcase, network: NodesDown, container: Cube, git: CodeFork, cpu: Cpu, security: ShieldCheck, globe: Globe, key: Key, rocket: Rocket, settings: Gear, disk: HardDrive, archive: Archive, monitoring: ChartLine, alerts: Bell, testing: Flask, bug: Bug, connection: PlugConnection, layers: Layers, clock: Clock, code: Code};
@@ -430,8 +431,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         row.append(add);
       }
       const title = t(mine ? 'remove' : 'add');
-      if (add.title !== title) {
-        add.title = title; add.setAttribute('aria-label', title);
+      if (add.dataset.ycpTooltip !== title) {
+        add.dataset.ycpTooltip = title; add.setAttribute('aria-label', title);
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('width', '16'); svg.setAttribute('height', '16'); svg.setAttribute('aria-hidden', 'true');
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -621,13 +622,13 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         rememberExpanded(item.id); save(); render();
       }}><Icon data={!empty && expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button> : <span className="ycp-disclosure-space"/>)}
       {item.type === 'folder' && <span className="ycp-indent"/>}
-      <span className="ycp-item-icon" title={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item)]} size={16}/></span>
-      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
+      <span className="ycp-item-icon" data-ycp-tooltip={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item)]} size={16}/></span>
+      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} data-ycp-tooltip={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
-      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} title={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={cloudSettings(item).mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
+      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} data-ycp-tooltip={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={cloudSettings(item).mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
-      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} aria-expanded={edit?.key === `${item.type}:${item.id}`} title={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
+      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} aria-expanded={edit?.key === `${item.type}:${item.id}`} data-ycp-tooltip={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
     </div>;
   }
   function EditActions({measurement = false}) {
@@ -670,13 +671,15 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     const folderNames = new Intl.Collator(consoleLanguage(), {sensitivity: 'base', numeric: true});
     return <ThemeProvider theme={theme} scoped lang={consoleLanguage()} rootClassName="ycp-root"><div className="ycp-layout" style={themeOverrides} data-all-open={allOpen || undefined} data-edit-open={Boolean(edit) || undefined} data-compact={compactDensity || undefined}>
       {native ? (() => {
-        const button = <ThemeProvider theme={theme} scoped lang={consoleLanguage()}><span style={themeOverrides}><Button view="flat-secondary" size="m" title={t('back')} aria-label={t('back')} onClick={() => { native = false; setNativeVisibility(); render(); }}><Icon data={ArrowLeft} size={16}/></Button></span></ThemeProvider>;
+        const button = <ThemeProvider theme={theme} scoped lang={consoleLanguage()}><span style={themeOverrides}><Button view="flat-secondary" size="m" data-ycp-tooltip={t('back')} aria-label={t('back')} onClick={() => { native = false; setNativeVisibility(); render(); }}><Icon data={ArrowLeft} size={16}/></Button></span></ThemeProvider>;
         return nativeReturnTarget ? createPortal(button, nativeReturnTarget) : <div className="ycp-native-fallback">{button}</div>;
       })() : <>
-        <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{!grouped && organization && <Text className="ycp-organization" variant="caption-2" color="secondary" title={organization.name}>{organization.name}</Text>}</div>
-          {!grouped && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
-          <Button view="flat-secondary" size="m" title={t('refresh')} aria-label={t('refresh')} loading={busy} onClick={refreshClouds}><Icon data={ArrowRotateRight} size={16}/></Button>
-          <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); pauseTreeScan(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
+        <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{!grouped && organization && <Text className="ycp-organization" variant="caption-2" color="secondary" data-ycp-tooltip={organization.name}>{organization.name}</Text>}</div>
+          {!grouped && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} data-ycp-tooltip={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
+          <span className="ycp-refresh" data-ycp-tooltip={(busy || statusKey !== 'cloudCount') ? `${t('refresh')}\n${t(statusKey, statusArgs)}` : t('refresh')}>
+            <Button view="flat-secondary" size="m" aria-label={t('refresh')} loading={busy} onClick={refreshClouds}><Icon data={ArrowRotateRight} size={16}/></Button>
+          </span>
+          <Button view="flat-secondary" size="m" data-ycp-tooltip={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); pauseTreeScan(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
         </div>
 
         {(busy || statusKey !== 'cloudCount') && <div className="ycp-status" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
@@ -691,7 +694,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
                 if (event.detail > 0) event.currentTarget.blur();
                 rememberLayout(); render();
               }}><Icon data={collapsedOrganizations.has(group.id) ? ChevronRight : ChevronDown} size={16}/></Button>
-              <Icon data={Briefcase} size={16}/><Text variant="body-1" title={group.name}>{group.name}</Text>
+              <Icon data={Briefcase} size={16}/><Text variant="body-1" data-ycp-tooltip={group.name}>{group.name}</Text>
               <Text variant="caption-2" color="secondary">{group.clouds.length}</Text>
             </div>}
             {(!grouped || !collapsedOrganizations.has(group.id)) && group.clouds.map(cloud => {
@@ -709,11 +712,11 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
           <TextInput value={edit.label} maxLength={120} controlProps={{'aria-label': t('label')}} onUpdate={value => { edit.label = value; render(); }}/>
           {Object.entries(Core.palettes).map(([name, colors]) => <div className="ycp-palette-group" key={name}>
             <div className="ycp-palette-heading"><Label theme={name === 'power' ? 'utility' : 'info'} size="xs">{t(name)}</Label></div>
-            <Palette className="ycp-palette" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.color]} aria-label={`${t('palette')}: ${t(name)}`} options={colors.map(color => ({value: color, title: color, content: <span className="ycp-swatch" style={{backgroundColor: color}}/>}))} onUpdate={values => { if (values[0]) { edit.color = values[0]; render(); } }}/>
+            <Palette className="ycp-palette" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.color]} aria-label={`${t('palette')}: ${t(name)}`} options={colors.map(color => ({value: color, content: <span data-ycp-tooltip={color} className="ycp-swatch" style={{backgroundColor: color}}/>}))} onUpdate={values => { if (values[0]) { edit.color = values[0]; render(); } }}/>
           </div>)}
           {edit.iconsEnabled && <div className="ycp-palette-group ycp-icons-group">
             <div className="ycp-palette-heading"><Label theme="info" size="xs">{t('icons')}</Label></div>
-            <Palette className="ycp-palette ycp-icons" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.icon]} aria-label={t('icons')} options={Object.entries(editIcons).map(([value, data]) => ({value, title: t(`icon_${value}`), content: <span className="ycp-icon-option" style={{color: edit.color}}><Icon data={data} size={16}/></span>}))} onUpdate={values => { if (Object.hasOwn(editIcons, values[0])) { edit.icon = values[0]; render(); } }}/>
+            <Palette className="ycp-palette ycp-icons" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.icon]} aria-label={t('icons')} options={Object.entries(editIcons).map(([value, data]) => ({value, content: <span data-ycp-tooltip={t(`icon_${value}`)} className="ycp-icon-option" style={{color: edit.color}}><Icon data={data} size={16}/></span>}))} onUpdate={values => { if (Object.hasOwn(editIcons, values[0])) { edit.icon = values[0]; render(); } }}/>
           </div>}
           <EditActions/>
         </form>}
@@ -730,7 +733,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); handle.removeEventListener('pointercancel', stop); };
         handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', stop); handle.addEventListener('pointercancel', stop);
       }}/>
-    </div></ThemeProvider>;
+    </div><TooltipLayer scope={aside} style={themeOverrides}/></ThemeProvider>;
   }
   function setWidth(width) {
     state.width = Math.round(Math.max(minimumWidth, Math.min(440, innerWidth - 120, width)));
