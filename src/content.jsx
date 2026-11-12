@@ -794,6 +794,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     invalidateScans(); scanReady = false;
     startupScan = true; startupRetryUsed = false;
     tree = nextTree; aside = tree.parentElement;
+    aside.querySelectorAll(':scope > [data-ycp-host]').forEach(node => node.remove());
+    tree.querySelectorAll('.ycp-add-native, .ycp-native-return-slot').forEach(node => node.remove());
     aside.dataset.ycpAside = ''; applyWidth();
     host = document.createElement('div'); host.dataset.ycpHost = '';
     shadow = host.attachShadow({mode: 'open'});

@@ -103,6 +103,12 @@ if(scenario==='delayed-native-selection'){
  fixture.showHeaderCloud=id=>{document.querySelector('.console-dashboard-header__entity-info')?.remove();const header=document.createElement('div');header.className='console-dashboard-header__entity-info';const icon=document.createElement('span');icon.className='console-dashboard-header__cloud-icon';const text=document.createElement('span');text.className='g-text';text.textContent=id;header.append(icon,text);document.querySelector('main').append(header)};
 }
 
+if(scenario==='stale-mount'){
+ const staleHost=document.createElement('div');staleHost.dataset.ycpHost='';staleHost.attachShadow({mode:'open'}).innerHTML='<div style="position:absolute;inset:0;background:white">Old inactive panel</div>';document.querySelector('aside').append(staleHost);
+ const staleSlot=document.createElement('span');staleSlot.className='ycp-native-return-slot';staleSlot.attachShadow({mode:'open'}).innerHTML='<button>Old inactive return</button>';document.querySelector('.cloud-tree-list-container__search').append(staleSlot);
+ const staleAdd=document.createElement('button');staleAdd.className='ycp-add-native';staleAdd.textContent='+';document.querySelector('[data-list-item="cloud.cloud-alpha"]').append(staleAdd);
+ Object.assign(fixture,{staleHost,staleSlot,staleAdd});
+}
 if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
 if(scenario==='becomes-empty')fixture.removeAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='folder-alpha');records.splice(index,1);ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='becomes-empty')fixture.addAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='cloud-alpha');records.splice(index+1,0,{type:'folder',id:'folder-alpha',name:'Alpha folder',cloudId:'cloud-alpha'});ul.style.height=records.length*36+'px';renderRows()};

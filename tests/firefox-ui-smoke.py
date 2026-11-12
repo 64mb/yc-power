@@ -395,6 +395,30 @@ def exercise(driver, origin, scenario):
         widths = driver.evaluate('return [...new Set(fixture.widths)];')
         assert widths and all(abs(width - 320) < 1 for width in widths), widths
         return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
+    if scenario == 'stale-mount':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-toggle")&&!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
+        assert driver.evaluate('return [fixture.staleHost,fixture.staleSlot,fixture.staleAdd].map(e=>e.isConnected);') == [False, False, False]
+        assert driver.evaluate('return [document.querySelectorAll("[data-ycp-host]").length,document.querySelectorAll(".ycp-native-return-slot").length];') == [1, 1]
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-alpha\\"] .ycp-add-native")')
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]?.mine.includes("cloud-alpha");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return !!' + root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud");')
+        driver.click('Array.from(' + root + '.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Default sidebar")')
+        driver.wait('return !!document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button");')
+        point = driver.evaluate('const b=document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button").getBoundingClientRect();return {x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **point}]}]})
+        driver.wait('return Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>/my clouds/i.test(e.textContent));')
+        tooltip = driver.evaluate('const e=Array.from(' + root + '.querySelectorAll(".g-tooltip")).find(e=>/my clouds/i.test(e.textContent)),b=e.getBoundingClientRect();return {x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height,w:innerWidth,h:innerHeight};')
+        assert tooltip['width'] > 0 and tooltip['height'] > 0 and tooltip['x'] >= 0 and tooltip['y'] >= 0 and tooltip['right'] <= tooltip['w'] and tooltip['bottom'] <= tooltip['h'], tooltip
+        driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
+        driver.wait('return !!' + root + '.querySelector(".ycp-cloud");')
+        driver.evaluate('fixture.checkMountAfter=performance.now()+2100;return true;')
+        driver.wait('return performance.now()>=fixture.checkMountAfter;')
+        assert driver.evaluate('return [document.querySelectorAll("[data-ycp-host]").length,document.querySelectorAll(".ycp-native-return-slot").length];') == [1, 1]
+        assert driver.evaluate('return document.querySelectorAll("[data-list-item=\\"cloud.cloud-alpha\\"] .ycp-add-native").length;') == 1
+        return {'scenario': scenario, 'staleNodes': 'old host, return slot and inactive plus removed', 'selection': 'new native plus works', 'tooltip': 'return hint remains in viewport', 'remount': 'no duplicate controls after timer ticks'}
     if scenario == 'delayed-native-selection':
         root = 'document.querySelector("[data-ycp-host]").shadowRoot'
         def current_cloud():
@@ -657,7 +681,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-native-selection', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'stale-mount', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-native-selection', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:
