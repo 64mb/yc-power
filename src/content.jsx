@@ -163,7 +163,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     catalogSaveTimer = setTimeout(() => { storage?.set({[catalogKey]: snapshot}).catch(() => {}); }, 150);
   }
   const loadedFolders = new Set(), attemptedFolders = new Set(), pendingFolders = new Map();
-  let scanGeneration = 0, queueScheduled = false;
+  let scanGeneration = 0, queueScheduled = false, activeScan = null;
   const folderKey = id => `${key}:${id}`;
   function invalidateScans() {
     clearCloudDrag();
@@ -181,7 +181,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     queueScheduled = true;
     queueMicrotask(() => {
       queueScheduled = false;
-      if (busy || stopped || native || !tree?.isConnected) return;
+      if (busy || stopped || native || allOpen || !tree?.isConnected) return;
       if (rescan) { rescan = false; void scan(); return; }
       for (const [requestKey, request] of pendingFolders) {
         pendingFolders.delete(requestKey);
@@ -248,7 +248,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   function setNativeVisibility() {
     if (nativeReturnSlot) nativeReturnSlot.style.display = native ? 'inline-flex' : 'none';
-    const covered = !native && (!allOpen || busy);
+    const covered = !native && !allOpen;
     tree?.toggleAttribute('data-ycp-covered', covered);
     host?.toggleAttribute('data-ycp-covered', covered);
     if (tree) {
@@ -256,6 +256,19 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       if (covered) tree.setAttribute('aria-hidden', 'true');
       else tree.removeAttribute('aria-hidden');
     }
+  }
+  function pauseTreeScan() {
+    scanGeneration++;
+    for (const request of pendingFolders.values()) if (request.key === key) request.generation = scanGeneration;
+    if (activeScan) {
+      const scan = activeScan;
+      if (!scan.restored && scan.list.isConnected) { scan.list.scrollTop = scan.originalScroll; scan.restored = true; }
+      if (scan.key === key) {
+        if (scan.target) queueFolderScan(scan.target, true);
+        else rescan = true;
+      }
+    }
+    if (busy || pendingFolders.size || rescan) statusKey = 'scanPaused';
   }
   function restoreNativeTree() {
     tree?.removeAttribute('data-ycp-covered'); tree?.removeAttribute('inert'); tree?.removeAttribute('aria-hidden');
@@ -344,10 +357,10 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       }
     }
   }
-  async function waitForRows(list, scanTree) {
+  async function waitForRows(list, scanTree, valid) {
     for (let attempt = 0; attempt < 100; attempt++) {
       await pause(40);
-      if (stopped || tree !== scanTree || !tree.isConnected || native) return false;
+      if (!valid()) return false;
       const positions = [...list.querySelectorAll('[data-list-item]')].filter(el => !el.dataset.listItem.startsWith('organization.') && getComputedStyle(el.closest('li') || el).position !== 'sticky').map(el => ({
         top: el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop,
         height: el.getBoundingClientRect().height,
@@ -369,24 +382,27 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       if (target) queueFolderScan(target, true); else rescan = true;
       return;
     }
-    if (stopped || !tree?.isConnected || native) return;
+    if (stopped || !tree?.isConnected) return;
+    if (native || allOpen) { rescan = true; statusKey = 'scanPaused'; render(); return; }
     const scanTree = tree, generation = scanGeneration, scanKey = key;
-    const valid = () => !stopped && tree === scanTree && tree.isConnected && !native && generation === scanGeneration && scanKey === key;
+    const valid = () => !stopped && tree === scanTree && tree.isConnected && !native && !allOpen && generation === scanGeneration && scanKey === key;
     const list = tree.querySelector('.cloud-tree-list');
     if (!list) { if (!state.mine.length) allOpen = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
     if (tree.querySelector('input')?.value) {
       statusKey = 'clearSearch'; allOpen = true; setNativeVisibility(); render(); return;
     }
+    const scanContext = {list, originalScroll: list.scrollTop, key: scanKey, target, restored: false};
+    activeScan = scanContext;
     busy = true; setNativeVisibility();
     statusKey = target ? 'loadingFolders' : 'scanning'; render();
-    const originalScroll = list.scrollTop;
+    const originalScroll = scanContext.originalScroll;
     const rows = new Map();
     let found = !target;
     try {
       for (let top = 0, steps = 0; steps < 600; steps++) {
         if (!valid()) return;
         list.scrollTop = top;
-        if (!await waitForRows(list, scanTree)) return;
+        if (!await waitForRows(list, scanTree, valid)) return;
         if (!valid()) return;
         for (const row of readRows(list)) collectRow(rows, row);
         if (target && !found) {
@@ -445,7 +461,8 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       statusKey = 'scanFailed'; if (!state.mine.length) allOpen = true;
     } finally {
       if (target && !valid()) attemptedFolders.delete(`${scanKey}:${target}`);
-      if (list.isConnected) list.scrollTop = originalScroll;
+      if (!scanContext.restored && list.isConnected) list.scrollTop = originalScroll;
+      if (activeScan === scanContext) activeScan = null;
       busy = false; setNativeVisibility(); render(); decorateNative();
       scheduleScans();
     }
@@ -552,9 +569,9 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         return nativeReturnTarget ? createPortal(button, nativeReturnTarget) : <div className="ycp-native-fallback">{button}</div>;
       })() : <>
         <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{organization && <Text className="ycp-organization" variant="caption-2" color="secondary" title={organization.name}>{organization.name}</Text>}</div>
-          {organization && scanReady && !busy && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
+          {organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
           <Button view="flat-secondary" size="m" title={t('refresh')} aria-label={t('refresh')} loading={busy} onClick={() => void scan()}><Icon data={ArrowRotateRight} size={16}/></Button>
-          <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
+          <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); pauseTreeScan(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
         </div>
 
         {(busy || statusKey !== 'cloudCount') && <div className="ycp-status" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
@@ -587,7 +604,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
           </div>}
           <EditActions/>
         </form>}
-        <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
+        <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { if (!allOpen) pauseTreeScan(); allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
 
       </>}
       <div ref={measureRef} className="ycp-action-measure" aria-hidden="true"><EditActions measurement/></div>
