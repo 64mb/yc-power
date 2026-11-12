@@ -395,6 +395,29 @@ def exercise(driver, origin, scenario):
         widths = driver.evaluate('return [...new Set(fixture.widths)];')
         assert widths and all(abs(width - 320) < 1 for width in widths), widths
         return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
+    if scenario == 'delayed-native-selection':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        def current_cloud():
+            return 'Array.from(' + root + '.querySelectorAll(".ycp-cloud[data-current]")).map(e=>e.closest("[data-cloud-id]").dataset.cloudId)'
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
+        driver.wait('return JSON.stringify(' + current_cloud() + ')==="[\\"cloud-alpha\\"]";')
+        assert driver.evaluate('return ' + root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-link").getAttribute("aria-current");') == 'page'
+        assert driver.evaluate('return location.pathname;') == '/folders/unknown-folder/dashboard'
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        assert not driver.evaluate('return !!' + root + '.querySelector(".ycp-folder");')
+        driver.evaluate('fixture.selectNativeCloud("cloud-beta");return true;')
+        driver.wait('return JSON.stringify(' + current_cloud() + ')==="[\\"cloud-beta\\"]";')
+        assert driver.evaluate('return location.pathname;') == '/folders/unknown-folder/dashboard'
+        assert driver.evaluate('return ' + root + '.querySelector("[data-cloud-id=cloud-beta] .ycp-link").getAttribute("aria-current");') == 'page'
+        driver.evaluate('fixture.selectNativeCloud(null);fixture.showHeaderCloud("cloud-alpha");return true;')
+        driver.wait('return JSON.stringify(' + current_cloud() + ')==="[\\"cloud-alpha\\"]";')
+        driver.evaluate('fixture.showHeaderCloud("cloud-beta");return true;')
+        driver.wait('return JSON.stringify(' + current_cloud() + ')==="[\\"cloud-beta\\"]";')
+        driver.evaluate('fixture.showHeaderCloud("cloud-unrecognized");return true;')
+        driver.wait('return ' + current_cloud() + '.length===0;')
+        assert not driver.evaluate('return !!' + root + '.querySelector(".ycp-cloud .ycp-link[aria-current=page]");')
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        return {'scenario': scenario, 'currentCloud': 'native selection and semantic header identify uncached folder owner', 'updates': 'same URL reflects changed native selection', 'unknownCloud': 'no highlight', 'cloudsOnly': 'no folder scans'}
     if scenario == 'delayed-tooltips':
         root = 'document.querySelector("[data-ycp-host]").shadowRoot'
         driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
@@ -634,7 +657,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-native-selection', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

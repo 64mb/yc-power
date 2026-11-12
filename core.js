@@ -93,12 +93,16 @@
         ...(row.type === 'folder' && !row.cloudId && cloudId ? {cloudId} : {})};
     });
   }
-  function currentOrganization(clouds, href, origin, selectedId) {
+  function currentCloud(clouds, href, origin, selectedCloudId) {
+    const active = route(href, origin);
+    const known = clouds.find(cloud => active && (active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id)));
+    return known || clouds.find(cloud => cloud.id === selectedCloudId) || null;
+  }
+  function currentOrganization(clouds, href, origin, selectedId, selectedCloudId) {
     const url = new URL(href, origin);
     const organization = url.pathname.match(/^\/organizations\/([^/]+)/)?.[1];
     if (organization) return {id: organization, name: clouds.find(c => c.organizationId === organization)?.organizationName || organization};
-    const active = route(href, origin);
-    const cloud = clouds.find(c => active && (active.type === 'cloud' ? c.id === active.id : c.id === active.cloudId || c.folders.some(f => f.id === active.id)));
+    const cloud = currentCloud(clouds, href, origin, selectedCloudId);
     if (cloud?.organizationId) return {id: cloud.organizationId, name: cloud.organizationName || cloud.organizationId};
     const organizations = new Map(clouds.filter(c => c.organizationId).map(c => [c.organizationId, c.organizationName || c.organizationId]));
     const id = organizations.has(selectedId) ? selectedId : organizations.size === 1 ? organizations.keys().next().value : null;
@@ -163,7 +167,7 @@
         })}];
     });
   }
-  const api = {label, color, route, catalog, annotateOrganizations, currentOrganization, scopeKey, reorderMine, preferenceSync, catalogCache, palettes};
+  const api = {label, color, route, catalog, annotateOrganizations, currentCloud, currentOrganization, scopeKey, reorderMine, preferenceSync, catalogCache, palettes};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.YCPowerCore = api;
 })(globalThis);

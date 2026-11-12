@@ -23,7 +23,7 @@ html,body{margin:0;width:100%;height:100%;min-width:0;font:13px Arial,sans-serif
 <script>
 const scenario=new URLSearchParams(location.search).get('scenario')||'small';
 const records=[];
-const opened=new Set(),loaded=new Set();let expansionClicks=0;
+const opened=new Set(),loaded=new Set();let expansionClicks=0;let nativeSelectedCloud=scenario==='delayed-native-selection'?'cloud-alpha':null;
 const org=(id,name)=>records.push({type:'organization',id,name});
 const cloud=(id,name)=>records.push({type:'cloud',id,name});
 const folder=(id,name,cloudId)=>records.push({type:'folder',id,name,cloudId});
@@ -50,6 +50,7 @@ function renderRows(){
  ul.replaceChildren(...visible.map(({row,index})=>{
   const li=document.createElement('li');li.className='native-row'+(row.type==='organization'?' native-org':'');li.style.transform='translateY('+(index*36)+'px)';
   const item=document.createElement('div');item.className='native-item cloud-tree-list-item__item cloud-tree-list-item__item_opened'+(row.type==='folder'?' native-folder':'');item.dataset.listItem=row.type+'.'+row.id;item.tabIndex=0;
+  if(row.type==='cloud'&&row.id===nativeSelectedCloud)item.setAttribute('aria-selected','true');
   const a=document.createElement('a');a.className='cloud-tree-list-item__title';a.title=row.name;a.textContent=row.name;a.href=row.type==='organization'?'https://example.com/organizations/'+row.id:row.type==='cloud'?'/clouds/'+row.id:'/clouds/'+row.cloudId+'/'+row.id;
   if(scenario==='multi-regional'&&row.type==='cloud'&&row.id==='cloud-beta')a.href='/auth/move?targetRegionId=region-beta&targetService=console&targetPath=%2Fcloud%2Fcloud-beta';
   if((scenario.startsWith('delayed')||scenario==='multi-regional'&&row.id==='cloud-beta')&&row.type==='cloud'){
@@ -66,6 +67,10 @@ const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');cons
 if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
+if(!saved&&scenario==='delayed-native-selection'){
+ memory.cloudOnlyHosts=[location.origin];
+ memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-beta'];
+}
 if(!saved&&['delayed-clouds-only','delayed-cloud-icons'].includes(scenario)){
  memory.cloudOnlyHosts=[location.origin];
  memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-alpha',name:'Alpha folder',href:'/clouds/cloud-alpha/folder-alpha',cloudId:'cloud-alpha'}]}];
@@ -92,6 +97,12 @@ if(!saved&&['empty-cloud','becomes-empty'].includes(scenario))memory['yc-power:'
 const widths=[];
 new MutationObserver(()=>{const host=document.querySelector('[data-ycp-host]');if(host)widths.push(host.parentElement.getBoundingClientRect().width)}).observe(document.querySelector('.console-dashboard-layout__aside'),{childList:true,subtree:true,attributes:true});
 window.fixture={scenario,records,memory,renderRows,widths,get expansionClicks(){return expansionClicks}};
+if(scenario==='delayed-native-selection'){
+ history.replaceState(null,'','/folders/unknown-folder/dashboard');
+ fixture.selectNativeCloud=id=>{nativeSelectedCloud=id;for(const row of document.querySelectorAll('[data-list-item^="cloud."]')){row.removeAttribute('aria-selected');if(row.dataset.listItem==='cloud.'+id)row.setAttribute('aria-selected','true')}};
+ fixture.showHeaderCloud=id=>{document.querySelector('.console-dashboard-header__entity-info')?.remove();const header=document.createElement('div');header.className='console-dashboard-header__entity-info';const icon=document.createElement('span');icon.className='console-dashboard-header__cloud-icon';const text=document.createElement('span');text.className='g-text';text.textContent=id;header.append(icon,text);document.querySelector('main').append(header)};
+}
+
 if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
 if(scenario==='becomes-empty')fixture.removeAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='folder-alpha');records.splice(index,1);ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='becomes-empty')fixture.addAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='cloud-alpha');records.splice(index+1,0,{type:'folder',id:'folder-alpha',name:'Alpha folder',cloudId:'cloud-alpha'});ul.style.height=records.length*36+'px';renderRows()};
