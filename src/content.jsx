@@ -2,13 +2,14 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal} from 'react-dom';
 import {Button, Icon, Label, Palette, TextInput, Text, ThemeProvider} from '@gravity-ui/uikit';
-import {ArrowRotateRight, Bars, ChevronDown, ChevronRight, Ellipsis, CircleMinus, CirclePlus, Folder, Cloud, FloppyDisk, ArrowRotateLeft, Xmark, Clouds, ArrowLeft} from '@gravity-ui/icons';
+import {ArrowRotateRight, Bars, ChevronDown, ChevronRight, Ellipsis, CircleMinus, CirclePlus, Folder, Cloud, FloppyDisk, ArrowRotateLeft, Xmark, Clouds, ArrowLeft, Terminal, Server, Database, Briefcase, NodesDown, Cube, CodeFork, Cpu, ShieldCheck, Globe, Key, Rocket, Gear, HardDrive, Archive, ChartLine, Bell, Flask, Bug, PlugConnection, Layers, Clock, Code} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './panel.css';
 import Core from '../core.js';
 import I18n from '../panel-i18n.js';
 
 const gravityCSS = __YCP_GRAVITY_CSS__;
+const folderIcons = {folder: Folder, terminal: Terminal, server: Server, database: Database, briefcase: Briefcase, network: NodesDown, container: Cube, git: CodeFork, cpu: Cpu, security: ShieldCheck, globe: Globe, key: Key, rocket: Rocket, settings: Gear, disk: HardDrive, archive: Archive, monitoring: ChartLine, alerts: Bell, testing: Flask, bug: Bug, connection: PlugConnection, layers: Layers, clock: Clock, code: Code};
 
 (function () {
   'use strict';
@@ -363,10 +364,14 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     save(); render(); decorateNative();
     if (!mine && !cloud.folders.length) queueFolderScan(cloud.id);
   }
+  function folderIconName(id) {
+    const icon = state.custom[`folder:${id}`]?.icon;
+    return Object.hasOwn(folderIcons, icon) ? icon : 'folder';
+  }
   function customize(item, parent) {
     const probe = document.createElement('span'); probe.style.color = itemColor(item); shadow.append(probe);
     const rgb = getComputedStyle(probe).color.match(/\d+/g); probe.remove();
-    edit = {key: `${item.type}:${item.id}`, name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
+    edit = {key: `${item.type}:${item.id}`, type: item.type, icon: folderIconName(item.id), name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
     render();
   }
   function safeHref(item) {
@@ -383,13 +388,13 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
         rememberExpanded(); save(); render();
       }}><Icon data={expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
       {item.type === 'folder' && <span className="ycp-indent"/>}
-      <span className="ycp-item-icon" style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? Cloud : Folder} size={16}/></span>
+      <span className="ycp-item-icon" style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? Cloud : folderIcons[folderIconName(item.id)]} size={16}/></span>
       <a className="ycp-link" href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
       {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(state.mine.includes(item.id) ? 'remove' : 'add')} title={t(state.mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={state.mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
-      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} title={t('customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
+      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} title={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
     </div>;
   }
   function EditActions({measurement = false}) {
@@ -445,7 +450,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
             </section>;
           })}
         </div>
-        {edit && <form className="ycp-edit" onSubmit={event => { event.preventDefault(); if (!/^#[0-9a-f]{6}$/i.test(edit.color)) return; state.custom[edit.key] = {label: edit.label.trim(), color: edit.color}; edit = null; save(); render(); }}>
+        {edit && <form className="ycp-edit" onSubmit={event => { event.preventDefault(); if (!/^#[0-9a-f]{6}$/i.test(edit.color)) return; state.custom[edit.key] = {label: edit.label.trim(), color: edit.color, ...(edit.type === 'folder' && Object.hasOwn(folderIcons, edit.icon) ? {icon: edit.icon} : {})}; edit = null; save(); render(); }}>
           <Text variant="caption-2">{edit.name}</Text>
           <TextInput value={edit.label} maxLength={120} controlProps={{'aria-label': t('label')}} onUpdate={value => { edit.label = value; render(); }}/>
           <Text variant="caption-2">{t('color')}</Text>
@@ -453,6 +458,10 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
             <div className="ycp-palette-heading"><Label theme={name === 'power' ? 'utility' : 'info'} size="xs">{t(name)}</Label></div>
             <Palette className="ycp-palette" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.color]} aria-label={`${t('palette')}: ${t(name)}`} options={colors.map(color => ({value: color, title: color, content: <span className="ycp-swatch" style={{backgroundColor: color}}/>}))} onUpdate={values => { if (values[0]) { edit.color = values[0]; render(); } }}/>
           </div>)}
+          {edit.type === 'folder' && <div className="ycp-palette-group ycp-icons-group">
+            <div className="ycp-palette-heading"><Label theme="info" size="xs">{t('icons')}</Label></div>
+            <Palette className="ycp-palette ycp-icons" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.icon]} aria-label={t('icons')} options={Object.entries(folderIcons).map(([value, data]) => ({value, title: t(`icon_${value}`), content: <span className="ycp-icon-option" style={{color: edit.color}}><Icon data={data} size={16}/></span>}))} onUpdate={values => { if (Object.hasOwn(folderIcons, values[0])) { edit.icon = values[0]; render(); } }}/>
+          </div>}
           <EditActions/>
         </form>}
         <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
