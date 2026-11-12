@@ -41,8 +41,8 @@
 .ycp-palette { display: flex; width: 100%; gap: 6px; }
 .ycp-palette-row { display: grid; width: 100%; grid-template-columns: repeat(8, minmax(0, 38px)); justify-content: space-between; gap: 6px; }
 .ycp-palette-row > [role="gridcell"] { min-width: 0; }
-.ycp-palette .ycp-palette-option { --g-button-height: 100%; width: 100%; height: auto; aspect-ratio: 1; }
-.ycp-palette-option .g-button__icon { position: absolute; inset: 3px; width: auto; height: auto; margin: 0; }
+.ycp-palette .ycp-palette-option { --ycp-palette-inset: clamp(0px, calc((100% - 20px) / 2), 3px); --g-button-height: 100%; width: 100%; height: auto; aspect-ratio: 1; }
+.ycp-palette-option .g-button__icon { position: absolute; inset: var(--ycp-palette-inset); width: auto; height: auto; margin: 0; }
 .ycp-swatch { display: block; width: 100%; height: 100%; border-radius: 3px; }
 .ycp-action-measure { position: fixed; left: 0; top: 0; width: max-content; visibility: hidden; pointer-events: none; contain: layout; }
 .ycp-action-measure .ycp-actions { width: max-content; }
@@ -55,9 +55,10 @@
 
 [data-compact] .ycp-row { min-height: 28px; }
 [data-compact] .ycp-link { padding-block: 5px; }
-[data-compact] .ycp-group { gap: 0; padding-block: 0; }
 [data-compact] .ycp-header { padding-block: 4px; }
 [data-compact] .ycp-all-row { height: 28px; }
+[data-compact] :is(.ycp-row, .ycp-all-row, .ycp-header) > .g-button::before,
+[data-compact] :is(.ycp-row, .ycp-all-row, .ycp-header) > .g-button::after { inset: 2px; }
 
 .ycp-status { padding: 0 12px 8px; min-height: 18px; color: var(--g-color-text-secondary); }
 [data-compact] .ycp-status { padding-bottom: 4px; }
@@ -67,8 +68,10 @@
 .ycp-layout[data-edit-open] > .ycp-edit { flex-shrink: 1; }
 
 .ycp-icons .ycp-palette-option .g-button__icon { inset: 0; }
+.ycp-icons .ycp-palette-option::before,
+.ycp-icons .ycp-palette-option::after { inset: var(--ycp-palette-inset); }
 .ycp-icons .ycp-palette-option { --g-button-border-width: 1px; --g-button-border-color: var(--g-color-line-generic); }
-.ycp-icons .ycp-palette-option:not(.g-button_selected) { --g-button-background-color: var(--g-color-base-generic); --g-button-background-color-hover: var(--g-color-base-generic-hover); }
+.ycp-icons .ycp-palette-option { --g-button-background-color: transparent; --g-button-background-color-hover: transparent; }
 .ycp-icons .ycp-palette-option.g-button_selected { --g-button-border-color: var(--g-color-line-brand); }
 
 .ycp-group { position: relative; }

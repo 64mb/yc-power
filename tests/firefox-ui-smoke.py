@@ -117,6 +117,63 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario in ['empty-cloud','becomes-empty']:
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return !!r?.querySelector(".ycp-cloud")&&!r.querySelector(".ycp-status");',timeout=25)
+        if scenario=='becomes-empty':
+            assert driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder");')
+            driver.evaluate('fixture.removeAlphaFolder();return true;')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+        driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return r.querySelector(".ycp-cloud>button").disabled&&!r.querySelector(".ycp-status");',timeout=25)
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button").getAttribute("aria-expanded");') == 'false'
+        assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.textContent.includes("No folders");')
+        driver.wait('return !fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].expandedClouds.includes("cloud-alpha");')
+        driver.evaluate('history.pushState(null,"","/clouds/cloud-alpha");return true;')
+        driver.evaluate('browser.storage.local.set({compactDensity:true});return true;')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button").getAttribute("aria-expanded");') == 'false'
+        if scenario=='becomes-empty':
+            driver.evaluate('fixture.addAlphaFolder();return true;')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+            driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return !r.querySelector(".ycp-cloud>button").disabled&&!r.querySelector(".ycp-status");',timeout=25)
+            driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button")')
+            driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder");')
+        return {'scenario':scenario,'emptyCloud':'collapsed after confirmed load','navigation':'does not reopen empty cloud','savedState':'collapsed',**({'newFolders':'expansion enabled after refresh'} if scenario=='becomes-empty' else {})}
+    if scenario == 'folder-order':
+        expected=['folder-deploy','folder-api-2','folder-api-10','folder-fallback','folder-dup-a','folder-dup-b','folder-alpha']
+        ids='Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-cloud-id=cloud-alpha] .ycp-folder a")).map(e=>e.getAttribute("href").split("/").pop())'
+        driver.wait('return ('+ids+').length===7;')
+        assert driver.evaluate('return '+ids+';') == expected
+        driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");',timeout=25)
+        driver.evaluate('fixture.orderChanged=false;const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{const ids='+ids+';if(ids.length===7&&ids.join(",")!=='+json.dumps(','.join(expected))+')fixture.orderChanged=true}).observe(r,{childList:true,subtree:true});fixture.reverseAlpha();return true;')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
+        driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");',timeout=25)
+        assert not driver.evaluate('return fixture.orderChanged;')
+        assert driver.evaluate('return '+ids+';') == expected
+        driver.evaluate('const key="yc-power:"+location.origin+":organization:id:org-alpha",prefs=structuredClone(fixture.memory[key]);prefs.custom["folder:folder-alpha"].label="AAA";browser.storage.local.set({[key]:prefs});return true;')
+        driver.wait('return ('+ids+')[0]==="folder-alpha";')
+        return {'scenario':scenario,'order':'display labels with numeric sorting','refresh':'stable despite reversed native arrival','rename':'reorders immediately','ties':'stable by ID'}
+    if scenario.startswith('retry'):
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-status")?.textContent.includes("2 seconds");')
+        driver.evaluate('fixture.retrySeenAt=performance.now();const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{if(!fixture.retryLoadingAt&&r.querySelector(".ycp-status")?.textContent.includes("Loading cloud list"))fixture.retryLoadingAt=performance.now()}).observe(r,{childList:true,subtree:true,characterData:true});return true;')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
+        if scenario == 'retry-permanent':
+            driver.wait('const s=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent;return s?.includes("Could not read")&&!s.includes("2 seconds");')
+            assert driver.evaluate('return performance.now()-fixture.retrySeenAt;') >= 1800
+            driver.evaluate('fixture.finalErrorAt=performance.now();return true;')
+            driver.wait('return performance.now()-fixture.finalErrorAt>2200;')
+            assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("2 seconds");')
+            return {'scenario': scenario, 'retry': 'once after 2 seconds', 'cache': 'retained after permanent failure'}
+        if scenario == 'retry-defers':
+            driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
+            expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list-container > div:last-child");list.scrollTop=250;return list.scrollTop;')
+            driver.wait('return performance.now()-fixture.retrySeenAt>2200;')
+            assert not driver.evaluate('return !!fixture.retryLoadingAt;')
+            assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
+            driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
+        driver.wait('return !!fixture.retryLoadingAt;', timeout=15)
+        assert driver.evaluate('return fixture.retryLoadingAt-fixture.retrySeenAt;') >= 1800
+        driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"));', timeout=25)
+        return {'scenario': scenario, 'retry': 'after 2 seconds', 'cache': 'visible until recovery', 'foreground': 'respected'}
     if scenario == 'delayed-controls':
         driver.wait('return fixture.expansionClicks===1;', timeout=25)
         driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
@@ -302,6 +359,10 @@ def exercise(driver, origin, scenario):
         driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
         compact = driver.evaluate('const row=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud");return {height:row.getBoundingClientRect().height,children:Array.from(row.children).map(e=>({height:e.getBoundingClientRect().height,font:getComputedStyle(e).lineHeight}))};')
         assert compact['height'] == 28, compact
+        spacing = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot,row=r.querySelector(".ycp-cloud"),group=row.closest(".ycp-group");return {gap:getComputedStyle(group).rowGap,padding:getComputedStyle(group).paddingTop,buttons:Array.from(row.querySelectorAll("button")).map(b=>({hit:b.getBoundingClientRect().height,inset:getComputedStyle(b,"::before").top,icon:b.querySelector("svg.g-icon")?.getBoundingClientRect().width}))};')
+        assert spacing['gap'] == '2px' and spacing['padding'] == '2px', spacing
+        assert all(b == {'hit': 28, 'inset': '2px', 'icon': 16} for b in spacing['buttons']), spacing
+
         driver.evaluate('browser.storage.local.set({compactDensity:false});return true;')
         driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
     geometry = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const row=r.querySelector(".ycp-cloud");const centers=Array.from(row.children).map(e=>{const b=e.getBoundingClientRect();return b.y+b.height/2});return {delta:Math.max(...centers)-Math.min(...centers),refresh:Array.from(row.querySelectorAll("button")).some(b=>b.title==="Refresh folders"),footer:!!r.querySelector(".ycp-footer")};')
@@ -352,7 +413,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

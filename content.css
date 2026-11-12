@@ -28,7 +28,7 @@
   height: 28px;
   z-index: 3;
 }
-[data-ycp-aside] [data-list-item^="cloud."] { padding-right: 30px; }
+[data-ycp-aside] [data-list-item^="cloud."] { padding-right: 36px; }
 
 [data-ycp-aside] .ycp-add-native { opacity: 0; pointer-events: none; }
 [data-ycp-aside] [data-list-item]:hover .ycp-add-native,
