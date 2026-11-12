@@ -1,0 +1,43 @@
+{
+  "manifest_version": 2,
+  "name": "YC Power",
+  "version": "0.3.1",
+  "description": "__MSG_extensionDescription__",
+  "permissions": [
+    "storage",
+    "https://console.yandex.cloud/*"
+  ],
+  "optional_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_title": "__MSG_actionTitle__",
+    "default_popup": "options.html",
+    "default_icon": "icons/icon.svg"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "yc-power@local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "default_locale": "en"
+}

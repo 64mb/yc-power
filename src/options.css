@@ -1,0 +1,30 @@
+:root { color-scheme: light dark; }
+body { margin: 0; min-width: 360px; width: 520px; background: var(--g-color-base-background); }
+* { box-sizing: border-box; }
+.settings { display: grid; gap: 18px; width: 100%; max-width: 760px; padding: 24px 20px; margin: 0 auto; }
+.settings-heading { display: flex; align-items: center; gap: 12px; }
+.settings-heading h1 { margin: 0 0 3px; }
+.settings-logo { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; color: var(--g-color-text-brand); background: transparent; flex: 0 0 auto; }
+.settings-card { padding: 20px; min-width: 0; }
+.settings-card h2 { margin: 0 0 8px; }
+.settings-card p { margin: 0 0 16px; }
+.domain-list { display: grid; gap: 10px; margin-bottom: 10px; }
+.domain-row { display: flex; gap: 6px; min-width: 0; }
+.domain-row .g-text-input { flex: 1; min-width: 0; }
+.settings-card .settings-hint { margin-top: 18px; }
+.settings-actions { display: flex; justify-content: flex-end; padding-top: 4px; }
+@media (min-width: 600px) { body { width: 100%; } .settings { padding-top: 48px; } }
+
+.settings > p { margin: 0; }
+
+body.g-root {
+    --g-color-base-brand: #348fff;
+    --g-color-base-brand-hover: #246bfd;
+    --g-color-base-brand-pressed: #246bfd;
+    --g-color-base-selection: rgba(52, 143, 255, .14);
+    --g-color-base-selection-hover: rgba(52, 143, 255, .22);
+    --g-color-text-brand: #348fff;
+    --g-color-text-brand-heavy: #348fff;
+    --g-color-text-brand-contrast: #fff;
+    --g-color-line-brand: #348fff;
+}

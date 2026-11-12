@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Native tree fixture</title>
+<link rel="stylesheet" href="/options.css">
+<link rel="stylesheet" href="/content.css">
+<style>
+html,body{margin:0;width:100%;height:100%;min-width:0;font:13px Arial,sans-serif}.console-dashboard-layout{display:flex;min-height:1100px}.console-dashboard-layout__aside{position:sticky;top:0;width:360px;height:100vh;border-right:1px solid #ddd;flex-shrink:0}.console-dashboard-layout__wrapper{min-width:600px;flex:1;padding:20px}.cloud-tree-list-container{display:flex;flex-direction:column;height:100%;background:white}.cloud-tree-list-container__search{display:flex;align-items:center;gap:4px;height:40px;padding:4px}.cloud-tree-list-container__search input{flex:1;min-width:0}.cloud-tree-list{flex:1;min-height:0;overflow:auto}.cloud-tree-list ul{position:relative;margin:0;padding:0;list-style:none}.native-row{position:absolute;top:0;left:0;width:100%;height:36px}.native-org{background:white;z-index:2}.native-item{height:36px;display:flex;align-items:center;padding-left:12px;box-sizing:border-box}.native-item a{color:inherit;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.native-folder{padding-left:30px}.cloud-tree-list-item__title{font:13px/18px Arial,sans-serif}.header-icon{width:24px;height:24px}.fixture-controls{font-size:12px;color:#666}
+</style>
+</head>
+<body class="g-root g-root_theme_light-hc">
+<div class="console-dashboard-layout">
+<aside class="console-dashboard-layout__aside">
+<div class="cloud-tree-list-container">
+<svg width="0" height="0" style="position:absolute"><defs><g id="shared-cloud"><rect x="2" y="2" width="12" height="12" fill="#348fff"/></g></defs></svg>
+<div class="cloud-tree-list-container__search"><input placeholder="Filter by cloud and folder"><button type="button" id="native-toggle" aria-label="Toggle original sidebar">▥</button></div>
+<div class="cloud-tree-list"><ul id="fixture-rows"></ul></div>
+</div>
+</aside>
+<main class="console-dashboard-layout__wrapper"><svg class="header-icon" viewBox="0 0 16 16"><use href="#shared-cloud"/></svg><h1>Console fixture</h1><p class="fixture-controls">Synthetic data for Firefox UI regression checks</p></main>
+</div>
+<script>
+const scenario=new URLSearchParams(location.search).get('scenario')||'small';
+const records=[];
+const org=(id,name)=>records.push({type:'organization',id,name});
+const cloud=(id,name)=>records.push({type:'cloud',id,name});
+const folder=(id,name,cloudId)=>records.push({type:'folder',id,name,cloudId});
+org('org-alpha','Alpha organization');
+if(scenario==='virtual')for(let n=0;n<30;n++)cloud('cloud-'+n,'Cloud '+n);
+else{
+ cloud('cloud-alpha','Alpha core');folder('folder-alpha','Alpha folder','cloud-alpha');
+ cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
+ if(scenario==='multi')org('org-beta','Beta organization');
+ cloud('cloud-beta','Beta core');folder('folder-beta','Beta folder','cloud-beta');
+}
+const list=document.querySelector('.cloud-tree-list'),ul=document.getElementById('fixture-rows');ul.style.height=records.length*36+'px';
+function renderRows(){
+ if(getComputedStyle(document.querySelector('.cloud-tree-list-container')).visibility==='hidden')return;
+ const first=Math.max(0,Math.floor(list.scrollTop/36)-2),last=Math.min(records.length,Math.ceil((list.scrollTop+list.clientHeight)/36)+2);
+ const visible=records.map((row,index)=>({row,index})).filter(({row,index})=>row.type==='organization'||index>=first&&index<last);
+ ul.replaceChildren(...visible.map(({row,index})=>{
+  const li=document.createElement('li');li.className='native-row'+(row.type==='organization'?' native-org':'');li.style.transform='translateY('+(index*36)+'px)';
+  const item=document.createElement('div');item.className='native-item'+(row.type==='folder'?' native-folder':'');item.dataset.listItem=row.type+'.'+row.id;item.tabIndex=0;
+  const a=document.createElement('a');a.className='cloud-tree-list-item__title';a.title=row.name;a.textContent=row.name;a.href=row.type==='organization'?'https://example.com/organizations/'+row.id:row.type==='cloud'?'/clouds/'+row.id:'/clouds/'+row.cloudId+'/'+row.id;
+  item.append(a);li.append(item);return li;
+ }));
+}
+list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
+const memory={};const listeners=[];
+window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
+history.replaceState(null,'','/clouds');
+window.fixture={scenario,records,memory,renderRows};
+</script>
+<script src="/content.js"></script>
+</body>
+</html>

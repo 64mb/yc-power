@@ -1,0 +1,92 @@
+import React, {useEffect, useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {Alert, Button, Card, Icon, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
+import {Plus, TrashBin, FloppyDisk} from '@gravity-ui/icons';
+import '@gravity-ui/uikit/styles/styles.css';
+import './options.css';
+import {getLanguage, messages} from './options-i18n.js';
+
+const language = getLanguage();
+const t = messages[language];
+document.documentElement.lang = language;
+class HostError extends Error {}
+
+const DEFAULT_HOSTS = ['https://console.yandex.cloud'];
+
+function normalizeHost(value) {
+    if (typeof value !== 'string' || !/^https:\/\//i.test(value)) throw new HostError(t.https);
+    let url;
+    try { url = new URL(value); } catch { throw new HostError(t.invalid); }
+    if (url.protocol !== 'https:' || url.hostname.includes('*') || url.username || url.password || url.pathname !== '/' || url.search || url.hash || url.port) {
+        throw new HostError(t.invalid);
+    }
+    return url.origin;
+}
+
+function Settings() {
+    const [hosts, setHosts] = useState(DEFAULT_HOSTS);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState(null);
+    useEffect(() => {
+        browser.storage.local.get('domainHosts').then((stored) => {
+            setHosts(Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS);
+            setLoading(false);
+        }).catch(() => {
+            setStatus({theme: 'danger', message: t.loadFailed});
+        });
+    }, []);
+    async function save(event) {
+        event.preventDefault();
+        try {
+            const next = [...new Set(hosts.map((host) => host.trim()).filter(Boolean).map(normalizeHost))];
+            // request permissions directly from the save gesture
+            const request = next.length ? browser.permissions.request({origins: next.map((host) => host + '/*')}) : Promise.resolve(true);
+            setSaving(true);
+            if (!await request) {
+                setStatus({theme: 'warning', message: t.denied});
+                return;
+            }
+            const stored = await browser.storage.local.get('domainHosts');
+            const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
+            await browser.storage.local.set({domainHosts: next});
+            const removed = previous.flatMap((host) => {
+                try { return [normalizeHost(host)]; } catch { return []; }
+            }).filter((host) => !next.includes(host) && !DEFAULT_HOSTS.includes(host));
+            if (removed.length) await browser.permissions.remove({origins: removed.map((host) => host + '/*')});
+            setHosts(next);
+            setStatus({theme: 'success', message: next.length ? t.saved : t.disabled});
+        } catch (error) {
+            setStatus({theme: 'danger', message: error instanceof HostError ? error.message : t.saveFailed});
+        } finally { setSaving(false); }
+    }
+    return <main className="settings">
+        <header className="settings-heading">
+            <img className="settings-logo" src="icons/icon.svg" width="44" height="44" alt=""/>
+            <div><Text as="h1" variant="header-1">YC Power</Text><Text color="secondary">{t.settings}</Text></div>
+        </header>
+        <Card className="settings-card" view="outlined">
+            <Text as="h2" variant="subheader-2">{t.domains}</Text>
+            <Text as="p" color="secondary">{t.intro}</Text>
+            <form onSubmit={save}>
+                <div className="domain-list">
+                    {hosts.map((host, index) => <div className="domain-row" key={index}>
+                        <TextInput size="l" value={host} disabled={loading || saving} placeholder={t.placeholder}
+                            controlProps={{'aria-label': `${t.address} ${index + 1}`, spellCheck: false, autoComplete: 'off'}}
+                            onUpdate={(value) => setHosts((current) => current.map((item, i) => i === index ? value : item))}/>
+                        <Button size="l" view="flat-secondary" disabled={loading || saving} title={t.remove} aria-label={`${t.remove} ${index + 1}`}
+                            onClick={() => setHosts((current) => current.filter((_, i) => i !== index))}><Icon data={TrashBin} size={16}/></Button>
+                    </div>)}
+                </div>
+                {!hosts.length && <Text as="p" color="secondary">{t.empty}</Text>}
+                <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, ''])}><Icon data={Plus} size={16}/>{t.add}</Button>
+                <Text className="settings-hint" as="p" variant="body-1" color="secondary">{t.hint}</Text>
+                <div className="settings-actions"><Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
+            </form>
+        </Card>
+        {status && <div role="status" aria-live="polite"><Alert theme={status.theme} message={status.message}/></div>}
+        <Text as="p" variant="caption-2" color="secondary">{t.privacy}</Text>
+    </main>;
+}
+
+createRoot(document.getElementById('root')).render(<ThemeProvider theme="system" lang={language}><Settings/></ThemeProvider>);

@@ -1,0 +1,13 @@
+/build/
+.env*
+/node_modules/
+__pycache__/
+*.pyc
+/content.js
+/options.js
+/options.css
+
+.DS_Store
+*.pem
+*.key
+/sign-firefox.sh
