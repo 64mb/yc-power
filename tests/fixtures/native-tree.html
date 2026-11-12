@@ -56,7 +56,7 @@ function renderRows(){
 }
 list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
 const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');const memory=saved||{};const listeners=[];
-if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
+if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
 if(!saved&&scenario==='multi-saved'){const k='yc-power:'+location.origin+':organization:id:org-beta';memory[k]={mine:['cloud-beta'],initialized:true,width:320,custom:{}};delete memory['yc-power:'+location.origin+':organization:id:org-alpha'];memory['yc-power:'+location.origin+':layout']={scopeKey:k,width:320}}

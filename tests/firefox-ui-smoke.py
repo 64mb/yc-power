@@ -117,6 +117,25 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'folder-icons':
+        driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
+        initial = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;')
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action")')
+        grid = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);')
+        assert grid == [8, 8, 8], grid
+        preset = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons button[value=database] .g-icon").innerHTML;')
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons button[value=database]")')
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit button[type=submit]")')
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]?.custom["folder:folder-alpha"]?.icon==="database";')
+        actual = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;')
+        assert actual == preset and actual != initial
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=folder-icons'})
+        driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;') == preset
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud button")).find(b=>b.title==="Label and color")')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");')
+        assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons");')
+        return {'scenario': scenario, 'presets': '24 in 8x3 grid', 'folderIcon': 'saved and restored', 'cloudIcon': 'fixed'}
     if scenario == 'expand-state':
         driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
         disclosure = 'Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud")).find(e=>e.querySelector("a").getAttribute("href").endsWith("cloud-beta")).querySelector("button")'
@@ -249,7 +268,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'failed']:
+            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:
