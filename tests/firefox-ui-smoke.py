@@ -122,7 +122,7 @@ def exercise(driver, origin, scenario):
         if scenario=='becomes-empty':
             assert driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder");')
             driver.evaluate('fixture.removeAlphaFolder();return true;')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
         driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return r.querySelector(".ycp-cloud>button").disabled&&!r.querySelector(".ycp-status");',timeout=25)
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button").getAttribute("aria-expanded");') == 'false'
         assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.textContent.includes("No folders");')
@@ -132,7 +132,7 @@ def exercise(driver, origin, scenario):
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button").getAttribute("aria-expanded");') == 'false'
         if scenario=='becomes-empty':
             driver.evaluate('fixture.addAlphaFolder();return true;')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
             driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return !r.querySelector(".ycp-cloud>button").disabled&&!r.querySelector(".ycp-status");',timeout=25)
             driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud>button")')
             driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder");')
@@ -144,7 +144,7 @@ def exercise(driver, origin, scenario):
         assert driver.evaluate('return '+ids+';') == expected
         driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");',timeout=25)
         driver.evaluate('fixture.orderChanged=false;const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{const ids='+ids+';if(ids.length===7&&ids.join(",")!=='+json.dumps(','.join(expected))+')fixture.orderChanged=true}).observe(r,{childList:true,subtree:true});fixture.reverseAlpha();return true;')
-        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Refresh clouds")')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
         driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
         driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");',timeout=25)
         assert not driver.evaluate('return fixture.orderChanged;')
@@ -185,7 +185,7 @@ def exercise(driver, origin, scenario):
         assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
         driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
         driver.wait('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("Loading");')
-        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Default sidebar")')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Default sidebar")')
         driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
         assert not driver.evaluate('return document.querySelector(".cloud-tree-list-container").hasAttribute("inert");')
         expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list");list.scrollTop=400;fixture.pauseAt=performance.now();return list.scrollTop;')
@@ -241,7 +241,7 @@ def exercise(driver, origin, scenario):
         assert driver.evaluate('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",");') == 'cloud-alpha,cloud-beta,cloud-analytics'
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-ycp-drop],[data-ycp-dragging],[data-reordering]").length;') == 0
         driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **points['source']}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 500, 'origin': 'viewport', **points['target']}]}]})
-        driver.evaluate('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Default sidebar").focus();return true;')
+        driver.evaluate('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Default sidebar").focus();return true;')
         driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': ' '}, {'type': 'keyUp', 'value': ' '}]}]})
         driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
         driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerUp', 'button': 0}]}]})
@@ -249,7 +249,7 @@ def exercise(driver, origin, scenario):
         driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-mine");')
         assert driver.evaluate('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",");') == 'cloud-alpha,cloud-beta,cloud-analytics'
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-ycp-drop],[data-ycp-dragging],[data-reordering]").length;') == 0
-        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show all organization clouds in this panel")')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Show all organization clouds in this panel")')
         assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud[data-reorderable]");')
         return {'scenario': scenario, 'mouseDrag': 'moves cloud with folders', 'reload': 'order restored', 'keyboard': 'Alt+Down works', 'allClouds': 'native order retained'}
     if scenario == 'folder-icons':
@@ -273,7 +273,7 @@ def exercise(driver, origin, scenario):
         driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=folder-icons'})
         driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;') == preset
-        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud button")).find(b=>b.title==="Label and color")')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud button")).find(b=>b.dataset.ycpTooltip==="Label and color")')
         driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");')
         assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons");')
         return {'scenario': scenario, 'presets': '24 in 8x3 grid', 'folderIcon': 'saved and restored', 'cloudIcon': 'fixed'}
@@ -309,7 +309,7 @@ def exercise(driver, origin, scenario):
         assert driver.evaluate('const u=new URL(' + json.dumps(href) + ',location.origin);return {path:u.pathname,region:u.searchParams.get("targetRegionId"),service:u.searchParams.get("targetService"),target:u.searchParams.get("targetPath")};') == {'path': '/auth/move', 'region': 'region-beta', 'service': 'console', 'target': '/cloud/cloud-beta'}
         assert not driver.evaluate('return !!' + beta + '.querySelector(".ycp-cloud > button:first-child[aria-expanded],.ycp-folder");')
         assert driver.evaluate('return !!' + alpha + '.querySelector(".ycp-folder");')
-        driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+        driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
         driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
         assert driver.evaluate('return fixture.expansionClicks;') == 0
         driver.click(root + '.querySelector(".ycp-toggle button")')
@@ -395,6 +395,42 @@ def exercise(driver, origin, scenario):
         widths = driver.evaluate('return [...new Set(fixture.widths)];')
         assert widths and all(abs(width - 320) < 1 for width in widths), widths
         return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
+    if scenario == 'delayed-tooltips':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
+        driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+        geometry = 'const r=' + root + ';return [r.querySelector(".ycp-header"),r.querySelector(".ycp-cloud")].map(e=>{const b=e.getBoundingClientRect();return [b.x,b.y,b.width,b.height]});'
+        before = driver.evaluate(geometry)
+        driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
+        driver.wait('return !!' + root + '.querySelector(".ycp-status");')
+        during = driver.evaluate(geometry)
+        assert during == before, {'before': before, 'during': during}
+        assert driver.evaluate('const e=' + root + '.querySelector(".ycp-status");return ["absolute","fixed"].includes(getComputedStyle(e).position);')
+        assert driver.evaluate('return ' + root + '.querySelectorAll("[title]").length;') == 0
+        driver.wait('return /Loading|Reading/.test(' + root + '.querySelector(".ycp-refresh").dataset.ycpTooltip);')
+        point = driver.evaluate('const b=' + root + '.querySelector(".ycp-refresh").getBoundingClientRect();return {x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **point}]}]})
+        driver.wait('return Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>/Loading|Reading/.test(e.textContent));')
+        assert not driver.evaluate('return !!document.querySelector(".g-tooltip");')
+        driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+        driver.wait('return !Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>/Loading|Reading/.test(e.textContent));')
+        assert driver.evaluate(geometry) == before
+        point = driver.evaluate('const b=' + root + '.querySelector(".ycp-cloud .ycp-link").getBoundingClientRect();return {x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **point}]}]})
+        driver.wait('return Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>e.textContent.includes("Alpha core")&&e.textContent.includes("cloud-alpha"));')
+        driver.evaluate(root + '.querySelector(".ycp-cloud .ycp-link").focus();return true;')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', 'x': 900, 'y': 500}]}]})
+        driver.wait('return ' + root + '.activeElement===' + root + '.querySelector(".ycp-cloud .ycp-link")&&Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>e.textContent.includes("Alpha core")&&e.textContent.includes("cloud-alpha"));')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00c'}, {'type': 'keyUp', 'value': '\ue00c'}]}]})
+        driver.wait('return !' + root + '.querySelector(".g-tooltip");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        assert driver.evaluate('return document.querySelector(".ycp-add-native").hasAttribute("title");') is False
+        point = driver.evaluate('const b=document.querySelector(".ycp-add-native").getBoundingClientRect();return {x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', 'x': point['x'] - 40, 'y': point['y']}]}]})
+        driver.wait('return getComputedStyle(document.querySelector(".ycp-add-native")).opacity==="1";')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **point}]}]})
+        driver.wait('return Array.from(' + root + '.querySelectorAll(".g-tooltip")).some(e=>/my clouds/i.test(e.textContent));')
+        return {'scenario': scenario, 'layout': 'header and first cloud remain fixed during refresh', 'tooltips': 'live loading, cloud identity and native selection use shadow-local Gravity tooltips', 'nativeTitles': 'absent from extension controls'}
     if scenario == 'delayed-cloud-icons':
         root = 'document.querySelector("[data-ycp-host]").shadowRoot'
         cloud = root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud")'
@@ -403,18 +439,18 @@ def exercise(driver, origin, scenario):
         default_icon = driver.evaluate('return ' + cloud + '.querySelector(".ycp-item-icon .g-icon").innerHTML;')
         def edit_cloud():
             driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
-            driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color")')
+            driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.dataset.ycpTooltip==="Label and color")')
             driver.wait('return !!' + root + '.querySelector(".ycp-edit");')
         edit_cloud()
         initial_label = driver.evaluate('return ' + root + '.querySelector(".ycp-edit input").value;')
         driver.evaluate('const e=' + root + '.querySelector(".ycp-edit input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(e,"Unsaved cloud draft");e.dispatchEvent(new Event("input",{bubbles:true}));return true;')
-        driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color")')
+        driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.dataset.ycpTooltip==="Label and color")')
         driver.wait('return !' + root + '.querySelector(".ycp-edit");')
-        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color").getAttribute("aria-expanded");') == 'false'
+        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.dataset.ycpTooltip==="Label and color").getAttribute("aria-expanded");') == 'false'
         assert not driver.evaluate('return !!' + prefs + '.custom["cloud:cloud-alpha"];')
         edit_cloud()
         assert driver.evaluate('return ' + root + '.querySelector(".ycp-edit input").value;') == initial_label
-        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color").getAttribute("aria-expanded");') == 'true'
+        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.dataset.ycpTooltip==="Label and color").getAttribute("aria-expanded");') == 'true'
         assert driver.evaluate('return Array.from(' + root + '.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);') == [8, 8, 8]
         assert driver.evaluate('return !!' + root + '.querySelector(".ycp-icons button[value=cloud]")&&!'+root+'.querySelector(".ycp-icons button[value=folder]");')
         rocket = driver.evaluate('return ' + root + '.querySelector(".ycp-icons button[value=rocket] .g-icon").innerHTML;')
@@ -451,7 +487,7 @@ def exercise(driver, origin, scenario):
         def assert_clouds_only():
             assert not driver.evaluate('return !!' + root + '.querySelector(".ycp-folder,.ycp-cloud > button:first-child[aria-expanded]");')
         def refresh_clouds():
-            driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+            driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
             driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
         assert_clouds_only()
         refresh_clouds()
@@ -491,7 +527,7 @@ def exercise(driver, origin, scenario):
             assert driver.evaluate('return fixture.expansionClicks;') == 1
             driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
             driver.evaluate('window.fixture.folderDisappeared=false;const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{if(!r.querySelector(".ycp-folder"))fixture.folderDisappeared=true}).observe(r,{childList:true,subtree:true});return true;')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.getAttribute("aria-label")==="Refresh clouds")')
             driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
             driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");', timeout=25)
             assert not driver.evaluate('return fixture.folderDisappeared;')
@@ -499,12 +535,12 @@ def exercise(driver, origin, scenario):
             return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'fresh folders retained throughout repeated refresh'}
         if scenario == 'delayed-cancel':
             driver.wait('return fixture.expansionClicks===1;')
-            modern = driver.evaluate('return Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).some(b=>b.title==="Show all organization clouds in this panel"&&!b.disabled);')
+            modern = driver.evaluate('return Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).some(b=>b.getAttribute("aria-label")==="Show all organization clouds in this panel"&&!b.disabled);')
             assert modern
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show all organization clouds in this panel")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Show all organization clouds in this panel")')
             driver.wait('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud").length===3;')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show my clouds")')
-            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Default sidebar")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.getAttribute("aria-label")==="Show my clouds")')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.getAttribute("aria-label")==="Default sidebar")')
             driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
             driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
 
@@ -550,7 +586,7 @@ def exercise(driver, origin, scenario):
 
         driver.evaluate('browser.storage.local.set({compactDensity:false});return true;')
         driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
-    geometry = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const row=r.querySelector(".ycp-cloud");const centers=Array.from(row.children).map(e=>{const b=e.getBoundingClientRect();return b.y+b.height/2});return {delta:Math.max(...centers)-Math.min(...centers),refresh:Array.from(row.querySelectorAll("button")).some(b=>b.title==="Refresh folders"),footer:!!r.querySelector(".ycp-footer")};')
+    geometry = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const row=r.querySelector(".ycp-cloud");const centers=Array.from(row.children).map(e=>{const b=e.getBoundingClientRect();return b.y+b.height/2});return {delta:Math.max(...centers)-Math.min(...centers),refresh:Array.from(row.querySelectorAll("button")).some(b=>b.getAttribute("aria-label")==="Refresh folders"),footer:!!r.querySelector(".ycp-footer")};')
     assert geometry['delta'] < 1 and not geometry['refresh'] and not geometry['footer'], geometry
     driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-toggle button")')
     tree_style = driver.evaluate('const s=getComputedStyle(document.querySelector(".cloud-tree-list-container"));return {visibility:s.visibility,opacity:s.opacity};')
@@ -559,7 +595,7 @@ def exercise(driver, origin, scenario):
     screenshot = driver.command('WebDriver:TakeScreenshot', {'full': False, 'scroll': False})
     value, _, _ = pixel(screenshot, icon['x'], icon['y'])
     assert all(abs(a - b) < 6 for a, b in zip(value, (52, 143, 255))), ('Shared SVG disappeared', value)
-    driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("button[title=\\"Default sidebar\\"]")')
+    driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("button[aria-label=\\"Default sidebar\\"]")')
     driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
     alignment = driver.evaluate('const a=document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button").getBoundingClientRect();const b=document.querySelector("#native-toggle").getBoundingClientRect();return Math.abs((a.y+a.height/2)-(b.y+b.height/2));')
     assert alignment < 2, alignment
@@ -598,7 +634,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

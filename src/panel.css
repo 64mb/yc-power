@@ -94,3 +94,9 @@
 [data-compact] .ycp-organization-row { min-height: 28px; }
 [data-compact] .ycp-organization-row > .g-button::before,
 [data-compact] .ycp-organization-row > .g-button::after { inset: 2px; }
+
+.ycp-refresh { display: inline-flex; flex-shrink: 0; }
+[data-compact] .ycp-refresh > .g-button::before,
+[data-compact] .ycp-refresh > .g-button::after { inset: 2px; }
+.ycp-status { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+[data-compact] .ycp-status { padding: 0; }
