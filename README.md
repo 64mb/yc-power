@@ -16,6 +16,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
 - Choose one of 24 Gravity UI icons for each folder; clouds keep their original icon
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
+- Drag clouds to reorder My clouds, or use Alt+Up/Down; the order is saved for each organization
 - Remember expanded clouds and automatically reveal the cloud you navigate to
 - Keep selected clouds, labels, colors, and sidebar width separate for every organization
 - Use compact Gravity UI actions and drag the sidebar edge to adjust its width, with an automatic minimum that keeps the actions on one line and a 440 px maximum

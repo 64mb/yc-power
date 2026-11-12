@@ -94,6 +94,14 @@
   function scopeKey(origin, organizationId) {
     return `yc-power:${origin}:organization:${organizationId ? `id:${encodeURIComponent(organizationId)}` : 'unscoped'}`;
   }
+  function reorderMine(ids, sourceId, targetId, after = false) {
+    const sourceIndex = ids.indexOf(sourceId);
+    if (sourceId === targetId || sourceIndex < 0 || !ids.includes(targetId)) return ids;
+    const result = [...ids];
+    result.splice(sourceIndex, 1);
+    result.splice(result.indexOf(targetId) + (after ? 1 : 0), 0, sourceId);
+    return result;
+  }
   function preferenceSync(cache, persist) {
     const pending = new Map();
     return {
@@ -142,7 +150,7 @@
         })}];
     });
   }
-  const api = {label, color, route, catalog, annotateOrganizations, currentOrganization, scopeKey, preferenceSync, catalogCache, palettes};
+  const api = {label, color, route, catalog, annotateOrganizations, currentOrganization, scopeKey, reorderMine, preferenceSync, catalogCache, palettes};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.YCPowerCore = api;
 })(globalThis);

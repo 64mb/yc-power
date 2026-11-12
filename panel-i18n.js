@@ -2,6 +2,7 @@
 
 const messages = {
   en: {
+    dragCloud: 'Drag to reorder', reorderCloud: 'Reorder {name}. Use Alt+Arrow Up or Alt+Arrow Down', cloudMoved: '{name}: position {position} of {count}',
     icons: 'Icons',
     icon_folder: 'Folder', icon_terminal: 'Terminal', icon_server: 'Server', icon_database: 'Database', icon_briefcase: 'Workspace', icon_network: 'Network', icon_container: 'Container', icon_git: 'Git branches', icon_cpu: 'CPU', icon_security: 'Security', icon_globe: 'Internet', icon_key: 'Credentials', icon_rocket: 'Deployment', icon_settings: 'Settings', icon_disk: 'Storage', icon_archive: 'Archive', icon_monitoring: 'Monitoring', icon_alerts: 'Alerts', icon_testing: 'Testing', icon_bug: 'Debugging', icon_connection: 'Connection', icon_layers: 'Environments', icon_clock: 'Scheduled jobs', icon_code: 'Code',
     power: 'Power', material: 'Material',
@@ -17,6 +18,7 @@ const messages = {
     scanFailed: 'Could not read the tree. The original list is available',
   },
   ru: {
+    dragCloud: 'Перетащите для изменения порядка', reorderCloud: 'Порядок облака {name}. Используйте Alt+стрелка вверх или Alt+стрелка вниз', cloudMoved: '{name}: позиция {position} из {count}',
     icons: 'Иконки',
     icon_folder: 'Каталог', icon_terminal: 'Терминал', icon_server: 'Сервер', icon_database: 'База данных', icon_briefcase: 'Рабочая область', icon_network: 'Сеть', icon_container: 'Контейнер', icon_git: 'Ветки Git', icon_cpu: 'Процессор', icon_security: 'Безопасность', icon_globe: 'Интернет', icon_key: 'Учетные данные', icon_rocket: 'Развертывание', icon_settings: 'Настройки', icon_disk: 'Хранилище', icon_archive: 'Архив', icon_monitoring: 'Мониторинг', icon_alerts: 'Уведомления', icon_testing: 'Тестирование', icon_bug: 'Отладка', icon_connection: 'Соединение', icon_layers: 'Окружения', icon_clock: 'Расписание', icon_code: 'Код',
     power: 'Power', material: 'Material',

@@ -1,8 +1,31 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {preferenceSync, scopeKey} = require('../core.js');
+const {preferenceSync, scopeKey, reorderMine} = require('../core.js');
 const a = scopeKey('https://console.yandex.cloud', 'a');
 const b = scopeKey('https://console.yandex.cloud', 'b');
+
+test('selected clouds move up and down before or after their target without changing the input', () => {
+  const ids = Object.freeze(['a', 'b', 'c', 'd']);
+  assert.deepEqual(reorderMine(ids, 'd', 'b'), ['a', 'd', 'b', 'c']);
+  assert.deepEqual(reorderMine(ids, 'd', 'b', true), ['a', 'b', 'd', 'c']);
+  assert.deepEqual(reorderMine(ids, 'a', 'c'), ['b', 'a', 'c', 'd']);
+  assert.deepEqual(reorderMine(ids, 'a', 'c', true), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(ids, ['a', 'b', 'c', 'd']);
+});
+
+test('reordering retains hidden and unknown selected cloud IDs in their relative order', () => {
+  const ids = ['hidden', 'a', 'unknown', 'b', 'hidden-last'];
+  assert.deepEqual(reorderMine(ids, 'b', 'a'), ['hidden', 'b', 'a', 'unknown', 'hidden-last']);
+  assert.deepEqual(ids, ['hidden', 'a', 'unknown', 'b', 'hidden-last']);
+});
+
+test('reordering ignores the same cloud or a missing source or target', () => {
+  const ids = ['a', 'b'];
+  assert.strictEqual(reorderMine(ids, 'a', 'a'), ids);
+  assert.strictEqual(reorderMine(ids, 'missing', 'b'), ids);
+  assert.strictEqual(reorderMine(ids, 'a', 'missing', true), ids);
+  assert.deepEqual(reorderMine([], 'a', 'b'), []);
+});
 
 test('read-only scope navigation never overwrites another tab settings', async () => {
   const writes = [];

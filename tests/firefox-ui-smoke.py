@@ -117,6 +117,64 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'cloud-order-scroll':
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelectorAll(".ycp-folder").length>=26&&!r.querySelector(".ycp-status");', timeout=25)
+        points = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const source=r.querySelector("[data-cloud-id=cloud-alpha] .ycp-link").getBoundingClientRect();const list=r.querySelector(".ycp-mine").getBoundingClientRect();return {source:{x:Math.round(source.x+source.width/2),y:Math.round(source.y+source.height/2)},target:{x:Math.round(list.x+80),y:Math.round(list.bottom-5)}};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [
+            {'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **points['source']}, {'type': 'pointerDown', 'button': 0},
+            {'type': 'pointerMove', 'duration': 600, 'origin': 'viewport', **points['target']}, {'type': 'pause', 'duration': 1500}, {'type': 'pointerUp', 'button': 0},
+        ]}]})
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]?.mine.join(",")==="cloud-beta,cloud-alpha";')
+        assert driver.evaluate('return location.pathname;') == '/clouds'
+        driver.evaluate('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-mine").scrollTop=0;return true;')
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-cloud-id=cloud-beta] .ycp-link")')
+        driver.wait('return location.pathname==="/clouds/cloud-beta";')
+        return {'scenario': scenario, 'edgeScroll': 'reveals next cloud even over source folders', 'navigation': 'normal click preserved, suppressed during drag'}
+    if scenario == 'cloud-order':
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===3;')
+        points = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const source=r.querySelector("[data-cloud-id=cloud-beta] .ycp-link").getBoundingClientRect();const target=r.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud").getBoundingClientRect();return {source:{x:Math.round(source.x+source.width/2),y:Math.round(source.y+source.height/2)},target:{x:Math.round(target.x+48),y:Math.round(target.y+5)}};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [
+            {'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **points['source']}, {'type': 'pointerDown', 'button': 0},
+            {'type': 'pointerMove', 'duration': 200, 'origin': 'viewport', 'x': points['source']['x']+10, 'y': points['source']['y']-5},
+            {'type': 'pointerMove', 'duration': 600, 'origin': 'viewport', **points['target']}, {'type': 'pause', 'duration': 200}, {'type': 'pointerUp', 'button': 0},
+        ]}]})
+        try:
+            driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]?.mine.join(",")==="cloud-beta,cloud-alpha,cloud-analytics";')
+        except AssertionError:
+            raise AssertionError(driver.evaluate('return {dropMarkers:document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-ycp-drop]").length,mine:fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]?.mine};'))
+        actual = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;return {order:Array.from(r.querySelectorAll(".ycp-group")).map(e=>e.dataset.cloudId),folder:r.querySelector("[data-cloud-id=cloud-beta] .ycp-folder a")?.getAttribute("href")};')
+        assert actual['order'] == ['cloud-beta', 'cloud-alpha', 'cloud-analytics'], actual
+        assert 'cloud-beta/folder-beta' in actual['folder'], actual
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=cloud-order'})
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===3;')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-group").dataset.cloudId;') == 'cloud-beta'
+        driver.evaluate('document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-cloud-id=cloud-beta] .ycp-cloud").focus();return true;')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00a'}, {'type': 'keyDown', 'value': '\ue015'}, {'type': 'keyUp', 'value': '\ue015'}, {'type': 'keyUp', 'value': '\ue00a'}]}]})
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",")==="cloud-alpha,cloud-beta,cloud-analytics";')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.activeElement?.closest("[data-cloud-id]")?.dataset.cloudId;') == 'cloud-beta'
+        for arrow, expected in [('\ue013', 'cloud-beta,cloud-alpha,cloud-analytics'), ('\ue015', 'cloud-alpha,cloud-beta,cloud-analytics')]:
+            driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00a'}, {'type': 'keyDown', 'value': arrow}, {'type': 'keyUp', 'value': arrow}, {'type': 'keyUp', 'value': '\ue00a'}]}]})
+            driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",")===' + json.dumps(expected) + ';')
+
+        driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");', timeout=25)
+        points = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const s=r.querySelector("[data-cloud-id=cloud-beta] .ycp-link").getBoundingClientRect(),t=r.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud").getBoundingClientRect();return {source:{x:Math.round(s.x+s.width/2),y:Math.round(s.y+s.height/2)},target:{x:Math.round(t.x+48),y:Math.round(t.y+5)}};')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **points['source']}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 500, 'origin': 'viewport', **points['target']}]}]})
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00c'}, {'type': 'keyUp', 'value': '\ue00c'}]}]})
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerUp', 'button': 0}]}]})
+        assert driver.evaluate('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",");') == 'cloud-alpha,cloud-beta,cloud-analytics'
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-ycp-drop],[data-ycp-dragging],[data-reordering]").length;') == 0
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerMove', 'duration': 30, 'origin': 'viewport', **points['source']}, {'type': 'pointerDown', 'button': 0}, {'type': 'pointerMove', 'duration': 500, 'origin': 'viewport', **points['target']}]}]})
+        driver.evaluate('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Default sidebar").focus();return true;')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': ' '}, {'type': 'keyUp', 'value': ' '}]}]})
+        driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
+        driver.command('WebDriver:PerformActions', {'actions': [{'type': 'pointer', 'id': 'mouse', 'parameters': {'pointerType': 'mouse'}, 'actions': [{'type': 'pointerUp', 'button': 0}]}]})
+        driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-mine");')
+        assert driver.evaluate('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.join(",");') == 'cloud-alpha,cloud-beta,cloud-analytics'
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("[data-ycp-drop],[data-ycp-dragging],[data-reordering]").length;') == 0
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show all organization clouds in this panel")')
+        assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud[data-reorderable]");')
+        return {'scenario': scenario, 'mouseDrag': 'moves cloud with folders', 'reload': 'order restored', 'keyboard': 'Alt+Down works', 'allClouds': 'native order retained'}
     if scenario == 'folder-icons':
         driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
         initial = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;')
@@ -244,6 +302,7 @@ def exercise(driver, origin, scenario):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--firefox', default=shutil.which('firefox') or '/Applications/Firefox.app/Contents/MacOS/firefox')
+    parser.add_argument('--scenario', action='append')
     args = parser.parse_args()
     if not (ROOT / 'content.js').exists():
         raise SystemExit('Run npm run build first')
@@ -268,7 +327,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:
