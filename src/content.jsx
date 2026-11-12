@@ -17,6 +17,10 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   const storage = globalThis.browser?.storage.local;
   const defaults = () => ({mine: [], initialized: false, width: 360, custom: {}, showAllModern: false});
   let organization = null, key = Core.scopeKey(location.origin, null), preferences = {};
+  const layoutKey = `yc-power:${location.origin}:layout`;
+  function rememberLayout() {
+    storage?.set({[layoutKey]: {scopeKey: key, width: state.width}}).catch(() => {});
+  }
   const preferenceSync = Core.preferenceSync(preferences, (savedKey, snapshot) => storage?.set({[savedKey]: snapshot}));
   let state = {...defaults(), clouds: []};
   let scanReady = false, selectedOrganizationId = null;
@@ -24,8 +28,44 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   let tree, aside, host, root, shadow, observer, themeObserver, timer, saveTimer;
   let busy = false, native = false, allOpen = false, edit = null, stopped = false;
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
-  let themeOverrides = {}, panelWidth = 360, minimumWidth = 260;
+  let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false;
   const expanded = new Set();
+  const loadedFolders = new Set(), attemptedFolders = new Set(), pendingFolders = new Map();
+  let scanGeneration = 0, queueScheduled = false;
+  const folderKey = id => `${key}:${id}`;
+  function invalidateScans() {
+    scanGeneration++; pendingFolders.clear(); loadedFolders.clear(); attemptedFolders.clear();
+    if (busy) rescan = true;
+  }
+  function queueFolderScan(id, force = false) {
+    const requestKey = folderKey(id);
+    if (!force && attemptedFolders.has(requestKey)) return;
+    pendingFolders.set(requestKey, {id, key, generation: scanGeneration});
+    scheduleScans();
+  }
+  function scheduleScans() {
+    if (queueScheduled || stopped) return;
+    queueScheduled = true;
+    queueMicrotask(() => {
+      queueScheduled = false;
+      if (busy || stopped || native || !tree?.isConnected) return;
+      if (rescan) { rescan = false; void scan(); return; }
+      for (const [requestKey, request] of pendingFolders) {
+        pendingFolders.delete(requestKey);
+        if (request.key !== key || request.generation !== scanGeneration) continue;
+        attemptedFolders.add(requestKey);
+        void scan(request.id);
+        return;
+      }
+    });
+  }
+  function queueExpandedFolders() {
+    const clouds = scopedClouds();
+    const allModern = state.showAllModern && organization && scanReady && clouds.length > 0 && clouds.length < 10;
+    for (const cloud of clouds) {
+      if ((allModern || state.mine.includes(cloud.id)) && expanded.has(cloud.id) && !cloud.folders.length && !loadedFolders.has(folderKey(cloud.id))) queueFolderScan(cloud.id);
+    }
+  }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   function consoleLanguage() {
     return I18n.language(document.documentElement.lang, tree?.querySelector('input')?.placeholder, navigator.language);
@@ -49,12 +89,13 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     clearTimeout(saveTimer);
     const {clouds} = state;
     preferenceSync.flush(key).catch(() => { statusKey = 'saveFailed'; render(); });
+    invalidateScans();
     key = nextKey;
     state = {...defaults(), ...structuredClone(preferences[key] || {}), clouds};
     state.width = Math.min(440, Math.max(1, Number(state.width) || 360));
     edit = null; expanded.clear(); state.mine.forEach(id => expanded.add(id));
     if (initialize) initializeMine();
-    applyWidth();
+    applyWidth(); rememberLayout();
   }
   function scopedClouds() {
     return state.clouds.filter(cloud => (cloud.organizationId || null) === (organization?.id || null));
@@ -190,10 +231,15 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     throw new Error('Virtual rows did not catch up with scrolling');
   }
   async function scan(target) {
-    if (busy || stopped || !tree?.isConnected || native) return;
-    const scanTree = tree;
+    if (busy) {
+      if (target) queueFolderScan(target, true); else rescan = true;
+      return;
+    }
+    if (stopped || !tree?.isConnected || native) return;
+    const scanTree = tree, generation = scanGeneration, scanKey = key;
+    const valid = () => !stopped && tree === scanTree && tree.isConnected && !native && generation === scanGeneration && scanKey === key;
     const list = tree.querySelector('.cloud-tree-list');
-    if (!list) { native = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
+    if (!list) { allOpen = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
     if (tree.querySelector('input')?.value) {
       statusKey = 'clearSearch'; allOpen = true; setNativeVisibility(); render(); return;
     }
@@ -204,21 +250,22 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     let found = !target;
     try {
       for (let top = 0, steps = 0; steps < 600; steps++) {
-        if (stopped || tree !== scanTree || !tree.isConnected || native) return;
+        if (!valid()) return;
         list.scrollTop = top;
         if (!await waitForRows(list, scanTree)) return;
-        if (stopped || tree !== scanTree || !tree.isConnected || native) return;
+        if (!valid()) return;
         for (const row of readRows(list)) collectRow(rows, row);
         if (target && !found) {
           const row = [...tree.querySelectorAll('[data-list-item]')].find(el => el.dataset.listItem === `cloud.${target}`);
           if (row) {
             found = true;
             const expand = row.querySelector('.cloud-tree-list-item__expand-button');
-            if (expand && !row.querySelector('.cloud-tree-list-item__expand-icon_expanded')) { tree.removeAttribute('inert'); expand.click(); setNativeVisibility(); }
+            const opened = row.matches('.cloud-tree-list-item__item_opened, .cloud-tree-list-item_opened, [aria-expanded="true"], [aria-busy="true"]') || row.closest('li')?.matches('.cloud-tree-list-item_opened, [aria-expanded="true"]') || row.querySelector('.cloud-tree-list-item__expand-icon_expanded, .cloud-tree-list-item__item_opened, .cloud-tree-list-item_opened, [aria-expanded="true"], [aria-busy="true"], [role="progressbar"], .g-spin');
+            if (expand && !opened) { tree.removeAttribute('inert'); expand.click(); setNativeVisibility(); }
             let stable = 0, previousSignature = '';
             for (let attempt = 0; attempt < 60; attempt++) {
               await pause(100);
-              if (tree !== scanTree || !tree.isConnected || stopped) return;
+              if (!valid()) return;
               const after = readRows(list).filter(item => !item.pinned && item.type !== 'organization').sort((a, b) => a.offset - b.offset);
               const index = after.findIndex(item => item.type === 'cloud' && item.id === target);
               const children = [];
@@ -239,19 +286,22 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
         if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) break;
         top = list.scrollTop + Math.max(36, list.clientHeight - 108);
       }
-      if (stopped || tree !== scanTree || !tree.isConnected || native) return;
+      if (!valid()) return;
       state.clouds = Core.catalog([...rows.values()], state.clouds, found ? target : undefined);
+      if (target && found) loadedFolders.add(folderKey(target));
       scanReady = true;
       syncOrganization(); initializeMine();
       statusKey = 'cloudCount'; statusArgs = {count: scopedClouds().length};
       if (target && !found) statusKey = 'notFound';
     } catch (error) {
+      if (!valid()) return;
       console.warn('YC Power: tree scan failed', error);
-      statusKey = 'scanFailed'; native = true; allOpen = true;
+      statusKey = 'scanFailed'; allOpen = true;
     } finally {
+      if (target && !valid()) attemptedFolders.delete(`${scanKey}:${target}`);
       if (list.isConnected) list.scrollTop = originalScroll;
       busy = false; setNativeVisibility(); render(); decorateNative();
-      if (rescan && !stopped) { rescan = false; void scan(); }
+      scheduleScans();
     }
   }
   function toggleMine(cloud) {
@@ -271,7 +321,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     state.initialized = true;
     if (!mine) expanded.add(cloud.id);
     save(); render(); decorateNative();
-    if (!mine && !cloud.folders.length) void scan(cloud.id);
+    if (!mine && !cloud.folders.length) queueFolderScan(cloud.id);
   }
   function customize(item, parent) {
     const probe = document.createElement('span'); probe.style.color = itemColor(item); shadow.append(probe);
@@ -288,7 +338,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     return <div className={`ycp-row ycp-${item.type}`} data-current={current || undefined}>
       {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={expanded.has(item.id)} disabled={busy} onClick={() => {
         if (expanded.has(item.id)) expanded.delete(item.id);
-        else { expanded.add(item.id); if (!item.folders.length) void scan(item.id); }
+        else { expanded.add(item.id); if (!item.folders.length) queueFolderScan(item.id); }
         render();
       }}><Icon data={expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
       {item.type === 'folder' && <span className="ycp-indent"/>}
@@ -296,6 +346,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       <a className="ycp-link" href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
+      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" disabled={busy} aria-label={t('refreshFolders')} title={t('refreshFolders')} onClick={() => queueFolderScan(item.id, true)}><Icon data={ArrowRotateRight} size={16}/></Button>}
       {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(state.mine.includes(item.id) ? 'remove' : 'add')} title={t(state.mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={state.mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
       <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} title={t('customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
@@ -328,7 +379,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     const currentClouds = scopedClouds();
     const allModern = state.showAllModern && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10;
     const mine = currentClouds.filter(c => allModern || state.mine.includes(c.id));
-    return <ThemeProvider theme={theme} scoped lang={consoleLanguage()} rootClassName="ycp-root"><div className="ycp-layout" style={themeOverrides} data-all-open={allOpen || undefined} data-edit-open={Boolean(edit) || undefined}>
+    return <ThemeProvider theme={theme} scoped lang={consoleLanguage()} rootClassName="ycp-root"><div className="ycp-layout" style={themeOverrides} data-all-open={allOpen || undefined} data-edit-open={Boolean(edit) || undefined} data-compact={compactDensity || undefined}>
       {native ? (() => {
         const button = <ThemeProvider theme={theme} scoped lang={consoleLanguage()}><span style={themeOverrides}><Button view="flat-secondary" size="m" title={t('back')} aria-label={t('back')} onClick={() => { native = false; setNativeVisibility(); render(); }}><Icon data={ArrowLeft} size={16}/></Button></span></ThemeProvider>;
         return nativeReturnTarget ? createPortal(button, nativeReturnTarget) : <div className="ycp-native-fallback">{button}</div>;
@@ -347,8 +398,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
               <Item item={cloud}/>
               {expanded.has(cloud.id) && <>
                 {folders.map(folder => <Item key={folder.id} item={folder} parent={cloud}/>)}
-                {!cloud.folders.length && <div className="ycp-note">{t('noFolders')}</div>}
-                <div className="ycp-footer"><Button view="flat-secondary" size="s" disabled={busy} onClick={() => void scan(cloud.id)}>{t('refreshFolders')}</Button></div>
+                {!cloud.folders.length && <div className="ycp-note">{t(loadedFolders.has(folderKey(cloud.id)) ? 'noFolders' : 'loadingFolders')}</div>}
               </>}
             </section>;
           })}
@@ -363,7 +413,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
           </div>)}
           <EditActions/>
         </form>}
-        <div className="ycp-toggle"><Button view="flat" size="l" aria-expanded={allOpen} onClick={() => { allOpen = !allOpen; setNativeVisibility(); render(); }}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/>{t('all')} <Text color="secondary">{currentClouds.length || ''}</Text></Button></div>
+        <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
         {(busy || statusKey !== 'cloudCount') && <div className="ycp-footer" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
       </>}
       <div ref={measureRef} className="ycp-action-measure" aria-hidden="true"><EditActions measurement/></div>
@@ -380,7 +430,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   }
   function setWidth(width) {
     state.width = Math.round(Math.max(minimumWidth, Math.min(440, innerWidth - 120, width)));
-    applyWidth(); save();
+    applyWidth(); save(); rememberLayout();
   }
   function applyWidth() {
     if (!aside) return;
@@ -392,10 +442,17 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     aside.style.setProperty('--ycp-width', `${panelWidth}px`);
   }
   function onResize() { applyWidth(); render(); }
-  function render() { if (root && !stopped) root.render(<Panel/>); }
+  function render() { if (root && !stopped) { root.render(<Panel/>); queueExpandedFolders(); scheduleScans(); } }
   function refreshTheme() {
     if (!aside) return;
     const computed = getComputedStyle(aside);
+    let surface = tree, background = computed.getPropertyValue('--g-color-base-background');
+    while (surface) {
+      const candidate = getComputedStyle(surface).backgroundColor;
+      if (candidate && candidate !== 'transparent' && candidate !== 'rgba(0, 0, 0, 0)') { background = candidate; break; }
+      surface = surface.parentElement;
+    }
+    host?.style.setProperty('--ycp-console-background', background || '#fff');
     themeOverrides = Object.fromEntries([...computed].filter(name => name.startsWith('--g-')).map(name => [name, computed.getPropertyValue(name)]));
     const reference = tree?.querySelector('.cloud-tree-list-item__title');
     if (reference) {
@@ -412,6 +469,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       if (host?.isConnected) {
         observer?.disconnect(); root?.unmount(); host.remove(); root = null;
         restoreNativeTree(); aside?.removeAttribute('data-ycp-aside'); aside?.style.removeProperty('--ycp-width');
+        invalidateScans(); scanReady = false;
         tree = null; aside = null; host = null;
       }
       return;
@@ -419,13 +477,14 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
     if (nextTree === tree && host?.isConnected) { ensureNativeReturn(); return; }
     observer?.disconnect(); root?.unmount(); host?.remove();
     restoreNativeTree(); aside?.removeAttribute('data-ycp-aside'); aside?.style.removeProperty('--ycp-width');
+    invalidateScans(); scanReady = false;
     tree = nextTree; aside = tree.parentElement;
-    refreshTheme();
     aside.dataset.ycpAside = ''; applyWidth();
     host = document.createElement('div'); host.dataset.ycpHost = '';
     shadow = host.attachShadow({mode: 'open'});
     const style = document.createElement('style'); style.textContent = gravityCSS;
     const app = document.createElement('div'); shadow.append(style, app); aside.prepend(host);
+    refreshTheme();
     root = createRoot(app);
     observer = new MutationObserver(() => {
       decorateNative();
@@ -445,6 +504,7 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
   }
   globalThis.browser?.storage.onChanged.addListener((changes, area) => {
     if (stopped || area !== 'local') return;
+    if (changes.compactDensity) { compactDensity = changes.compactDensity.newValue === true; render(); }
     if (changes.domainHosts && !changes.domainHosts.newValue?.includes(location.origin)) { cleanup(); return; }
     const prefix = `yc-power:${location.origin}:organization:`;
     let activeChanged = false;
@@ -466,9 +526,21 @@ const gravityCSS = __YCP_GRAVITY_CSS__;
       for (const [storedKey, settings] of Object.entries(storedPreferences)) {
         if (!Object.hasOwn(preferences, storedKey)) preferenceSync.receive(storedKey, settings);
       }
+      compactDensity = storedPreferences.compactDensity === true;
+      const layout = storedPreferences[layoutKey];
+      const prefix = `yc-power:${location.origin}:organization:`;
+      const visibleOrganizations = [...new Set([...document.querySelectorAll('.console-dashboard-layout__aside [data-list-item^="organization."]')].map(row => row.dataset.listItem.slice(13)))];
+      const visibleKey = visibleOrganizations.length === 1 ? Core.scopeKey(location.origin, visibleOrganizations[0]) : null;
+      const savedScopes = Object.keys(preferences).filter(savedKey => savedKey.startsWith(prefix));
+      if (visibleKey && preferences[visibleKey]) key = visibleKey;
+      else if (typeof layout?.scopeKey === 'string' && layout.scopeKey.startsWith(prefix) && preferences[layout.scopeKey]) key = layout.scopeKey;
+      else if (savedScopes.length === 1) key = savedScopes[0];
+      if (key.startsWith(`${prefix}id:`)) {
+        try { selectedOrganizationId = decodeURIComponent(key.slice(`${prefix}id:`.length)); } catch (_) { selectedOrganizationId = null; }
+      }
       const stored = preferences[key];
       if (stored && Array.isArray(stored.mine)) state = {...state, ...stored, clouds: []};
-      state.width = Math.min(440, Math.max(1, Number(state.width) || 360));
+      state.width = Math.min(440, Math.max(1, Number(stored?.width ?? layout?.width) || 360));
     } catch (_) { /* default settings remain usable if storage is unavailable */ }
     window.addEventListener('resize', onResize);
     state.mine.forEach(id => expanded.add(id));

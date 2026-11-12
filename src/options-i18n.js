@@ -1,6 +1,8 @@
 export const messages = {
     en: {
         settings: 'Extension settings', domains: 'Console addresses',
+        appearance: 'Appearance', compactDensity: 'Compact mode',
+        compactDensityHint: 'Show more clouds and folders by reducing row height in My Clouds. Applies to all console addresses after saving.',
         intro: 'Choose where to show My Clouds. Your browser will ask for access to each new address.',
         address: 'Console address', remove: 'Remove address', add: 'Add address', save: 'Save',
         placeholder: 'https://console.example.com',
@@ -17,6 +19,8 @@ export const messages = {
     },
     ru: {
         settings: 'Настройки расширения', domains: 'Адреса консолей',
+        appearance: 'Внешний вид', compactDensity: 'Компактный режим',
+        compactDensityHint: 'Уменьшает высоту строк в "Моих облаках", чтобы показывать больше облаков и каталогов. После сохранения действует на всех адресах консолей.',
         intro: 'Выберите, где показывать "Мои облака". Для каждого нового адреса браузер запросит доступ.',
         address: 'Адрес консоли', remove: 'Удалить адрес', add: 'Добавить адрес', save: 'Сохранить',
         placeholder: 'https://console.example.com',

@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Alert, Button, Card, Icon, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
+import {Alert, Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
 import {Plus, TrashBin, FloppyDisk} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
@@ -25,12 +25,14 @@ function normalizeHost(value) {
 
 function Settings() {
     const [hosts, setHosts] = useState(DEFAULT_HOSTS);
+    const [compactDensity, setCompactDensity] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
     useEffect(() => {
-        browser.storage.local.get('domainHosts').then((stored) => {
+        browser.storage.local.get(['domainHosts', 'compactDensity']).then((stored) => {
             setHosts(Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS);
+            setCompactDensity(stored.compactDensity === true);
             setLoading(false);
         }).catch(() => {
             setStatus({theme: 'danger', message: t.loadFailed});
@@ -49,7 +51,7 @@ function Settings() {
             }
             const stored = await browser.storage.local.get('domainHosts');
             const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
-            await browser.storage.local.set({domainHosts: next});
+            await browser.storage.local.set({domainHosts: next, compactDensity});
             const removed = previous.flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }).filter((host) => !next.includes(host) && !DEFAULT_HOSTS.includes(host));
@@ -81,6 +83,12 @@ function Settings() {
                 {!hosts.length && <Text as="p" color="secondary">{t.empty}</Text>}
                 <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, ''])}><Icon data={Plus} size={16}/>{t.add}</Button>
                 <Text className="settings-hint" as="p" variant="body-1" color="secondary">{t.hint}</Text>
+                <section className="settings-appearance" aria-labelledby="appearance-heading">
+                    <Text as="h2" variant="subheader-2" id="appearance-heading">{t.appearance}</Text>
+                    <Switch size="l" checked={compactDensity} onUpdate={setCompactDensity} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'compact-density-hint'}}>{t.compactDensity}</Switch>
+                    <Text as="p" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
+                </section>
                 <div className="settings-actions"><Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>

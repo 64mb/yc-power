@@ -17,6 +17,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Keep selected clouds, labels, colors, and sidebar width separate for every organization
 - Use compact Gravity UI actions and drag the sidebar edge to adjust its width, with an automatic minimum that keeps the actions on one line and a 440 px maximum
 - Start with the current cloud automatically selected when it can be identified on first use
+- Enable compact mode in extension settings to reduce row height and spacing
 - Follow the console's Gravity theme and font, including light and dark themes
 - Use Russian or English according to the console language; extension settings follow the browser language, with English as the fallback
 

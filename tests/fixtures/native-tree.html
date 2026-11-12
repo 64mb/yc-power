@@ -23,6 +23,7 @@ html,body{margin:0;width:100%;height:100%;min-width:0;font:13px Arial,sans-serif
 <script>
 const scenario=new URLSearchParams(location.search).get('scenario')||'small';
 const records=[];
+const opened=new Set(),loaded=new Set();let expansionClicks=0;
 const org=(id,name)=>records.push({type:'organization',id,name});
 const cloud=(id,name)=>records.push({type:'cloud',id,name});
 const folder=(id,name,cloudId)=>records.push({type:'folder',id,name,cloudId});
@@ -31,26 +32,38 @@ if(scenario==='virtual')for(let n=0;n<30;n++)cloud('cloud-'+n,'Cloud '+n);
 else{
  cloud('cloud-alpha','Alpha core');folder('folder-alpha','Alpha folder','cloud-alpha');
  cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
- if(scenario==='multi')org('org-beta','Beta organization');
+ if(scenario.startsWith('multi'))org('org-beta','Beta organization');
  cloud('cloud-beta','Beta core');folder('folder-beta','Beta folder','cloud-beta');
 }
 const list=document.querySelector('.cloud-tree-list'),ul=document.getElementById('fixture-rows');ul.style.height=records.length*36+'px';
 function renderRows(){
  if(getComputedStyle(document.querySelector('.cloud-tree-list-container')).visibility==='hidden')return;
  const first=Math.max(0,Math.floor(list.scrollTop/36)-2),last=Math.min(records.length,Math.ceil((list.scrollTop+list.clientHeight)/36)+2);
- const visible=records.map((row,index)=>({row,index})).filter(({row,index})=>row.type==='organization'||index>=first&&index<last);
+ const visible=records.map((row,index)=>({row,index})).filter(({row,index})=>(!scenario.startsWith('delayed')||row.type!=='folder'||opened.has(row.cloudId)&&loaded.has(row.cloudId))&&(row.type==='organization'||index>=first&&index<last));
  ul.replaceChildren(...visible.map(({row,index})=>{
   const li=document.createElement('li');li.className='native-row'+(row.type==='organization'?' native-org':'');li.style.transform='translateY('+(index*36)+'px)';
   const item=document.createElement('div');item.className='native-item'+(row.type==='folder'?' native-folder':'');item.dataset.listItem=row.type+'.'+row.id;item.tabIndex=0;
   const a=document.createElement('a');a.className='cloud-tree-list-item__title';a.title=row.name;a.textContent=row.name;a.href=row.type==='organization'?'https://example.com/organizations/'+row.id:row.type==='cloud'?'/clouds/'+row.id:'/clouds/'+row.cloudId+'/'+row.id;
+  if(scenario.startsWith('delayed')&&row.type==='cloud'){
+   const button=document.createElement('button');button.type='button';button.className='cloud-tree-list-item__expand-button';button.setAttribute('aria-expanded',String(opened.has(row.id)));
+   const icon=document.createElement('span');icon.className='cloud-tree-list-item__expand-icon'+(opened.has(row.id)?' cloud-tree-list-item__expand-icon_expanded':'');icon.textContent='›';button.append(icon);
+   button.onclick=()=>{expansionClicks++;if(opened.has(row.id)){opened.delete(row.id);renderRows();return}opened.add(row.id);item.setAttribute('aria-busy','true');setTimeout(()=>{loaded.add(row.id);renderRows()},750)};
+   item.append(button);
+  }
   item.append(a);li.append(item);return li;
  }));
 }
 list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
 const memory={};const listeners=[];
+if(scenario.startsWith('delayed')||scenario==='multi-saved')memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
-window.fixture={scenario,records,memory,renderRows};
+if(scenario==='multi-saved'){const k='yc-power:'+location.origin+':organization:id:org-beta';memory[k]={mine:['cloud-beta'],initialized:true,width:320,custom:{}};delete memory['yc-power:'+location.origin+':organization:id:org-alpha'];memory['yc-power:'+location.origin+':layout']={scopeKey:k,width:320}}
+const widths=[];
+new MutationObserver(()=>{const host=document.querySelector('[data-ycp-host]');if(host)widths.push(host.parentElement.getBoundingClientRect().width)}).observe(document.querySelector('.console-dashboard-layout__aside'),{childList:true,subtree:true,attributes:true});
+window.fixture={scenario,records,memory,renderRows,widths,get expansionClicks(){return expansionClicks}};
+if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
+if(scenario==='small')document.querySelector('.cloud-tree-list-container').style.backgroundColor='rgb(243, 245, 247)';
 </script>
 <script src="/content.js"></script>
 </body>

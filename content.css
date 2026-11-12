@@ -7,7 +7,7 @@
   max-width: var(--ycp-width, 360px) !important;
   flex-basis: var(--ycp-width, 360px) !important;
 }
-[data-ycp-aside] > [data-ycp-host] { display: block; position: relative; z-index: 2; flex: 0 0 auto; min-height: 0; background: var(--g-color-base-background, #fff); }
+[data-ycp-aside] > [data-ycp-host] { display: block; position: relative; z-index: 2; flex: 0 0 auto; min-height: 0; background: var(--ycp-console-background, var(--g-color-base-background, #fff)); }
 [data-ycp-aside] > [data-ycp-host][data-ycp-covered] { position: absolute; inset: 0; }
 [data-ycp-aside] > .cloud-tree-list-container { flex: 1 1 auto; min-height: 0; height: auto; }
 [data-ycp-aside] > .cloud-tree-list-container[data-ycp-covered] {

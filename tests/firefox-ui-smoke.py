@@ -117,6 +117,29 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'failed':
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-header")&&r.textContent.includes("Could not read");')
+        return {'scenario': scenario, 'defaultView': 'my clouds retained after scan failure'}
+    if scenario == 'multi-saved':
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-cloud")&&r.textContent.includes("Beta organization");')
+        widths = driver.evaluate('return [...new Set(fixture.widths)];')
+        assert widths and all(abs(width - 320) < 1 for width in widths), widths
+        return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
+    if scenario.startswith('delayed'):
+        if scenario == 'delayed-cancel':
+            driver.wait('return fixture.expansionClicks===1;')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Original sidebar")')
+            driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
+            driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
+
+        try:
+            driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");', timeout=25)
+        except AssertionError:
+            raise AssertionError(driver.evaluate('return {scenario:fixture.scenario,clicks:fixture.expansionClicks,panel:document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-root").textContent,rows:document.querySelector(".cloud-tree-list").textContent};'))
+        assert driver.evaluate('return fixture.expansionClicks;') == 1
+        widths = driver.evaluate('return [...new Set(fixture.widths)];')
+        assert widths and all(abs(width - 320) < 1 for width in widths), widths
+        return {'scenario': scenario, 'savedCloudFolders': 'loaded automatically', 'nativeExpansion': 'once'}
     ready = driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r && r.querySelector(".ycp-toggle") && !r.textContent.includes("Loading cloud list") && !r.textContent.includes("Reading the console tree") && {count:r.querySelector(".ycp-toggle .g-text")?.textContent};')
     expected = '30' if scenario == 'virtual' else '3' if scenario == 'small' else ''
     if expected:
@@ -124,6 +147,13 @@ def exercise(driver, origin, scenario):
     text = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-root").textContent;')
     assert 'Could not read' not in text, text
     assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-search");')
+    if scenario == 'small':
+        assert driver.evaluate('return getComputedStyle(document.querySelector("[data-ycp-host]")).backgroundColor;') == 'rgb(243, 245, 247)'
+        for theme, background, foreground in [('dark-hc', 'rgb(31, 37, 43)', 'rgb(230, 235, 240)'), ('light-hc', 'rgb(255, 255, 255)', 'rgb(20, 25, 30)')]:
+            driver.evaluate('document.querySelector(".cloud-tree-list-container").style.backgroundColor=' + json.dumps(background) + ';document.body.style.setProperty("--g-color-text-primary",' + json.dumps(foreground) + ');document.body.className=' + json.dumps('g-root g-root_theme_' + theme) + ';return true;')
+            driver.wait('const h=document.querySelector("[data-ycp-host]");return getComputedStyle(h).backgroundColor===' + json.dumps(background) + ';')
+            colors = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;return {root:getComputedStyle(r.querySelector(".ycp-root")).backgroundColor,text:getComputedStyle(r.querySelector(".ycp-layout")).color};')
+            assert colors == {'root': 'rgba(0, 0, 0, 0)', 'text': foreground}, colors
     if scenario == 'virtual':
         return {'scenario': scenario, 'clouds': ready['count']}
     driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-toggle button")')
@@ -133,6 +163,15 @@ def exercise(driver, origin, scenario):
     text = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-root").textContent;')
     assert ('Beta organization' if scenario == 'multi' else 'Alpha organization') in text, text
     assert ('Beta' if scenario == 'multi' else 'Alpha') in text, text
+    if scenario == 'small':
+        driver.evaluate('browser.storage.local.set({compactDensity:true});return true;')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
+        compact = driver.evaluate('const row=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-cloud");return {height:row.getBoundingClientRect().height,children:Array.from(row.children).map(e=>({height:e.getBoundingClientRect().height,font:getComputedStyle(e).lineHeight}))};')
+        assert compact['height'] == 28, compact
+        driver.evaluate('browser.storage.local.set({compactDensity:false});return true;')
+        driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector("[data-compact]");')
+    geometry = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const row=r.querySelector(".ycp-cloud");const centers=Array.from(row.children).map(e=>{const b=e.getBoundingClientRect();return b.y+b.height/2});return {delta:Math.max(...centers)-Math.min(...centers),refresh:Array.from(row.querySelectorAll("button")).some(b=>b.title==="Refresh folders"),footer:!!r.querySelector(".ycp-footer")};')
+    assert geometry['delta'] < 1 and geometry['refresh'] and not geometry['footer'], geometry
     driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-toggle button")')
     tree_style = driver.evaluate('const s=getComputedStyle(document.querySelector(".cloud-tree-list-container"));return {visibility:s.visibility,opacity:s.opacity};')
     assert tree_style == {'visibility': 'visible', 'opacity': '1'}, tree_style
@@ -178,7 +217,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in ['small', 'multi', 'virtual']:
+            for scenario in ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'multi-saved', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:
