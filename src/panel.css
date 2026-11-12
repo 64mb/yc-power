@@ -85,3 +85,12 @@
 
 .ycp-cloud[data-reorderable] { user-select: none; }
 .ycp-mine[data-reordering], .ycp-mine[data-reordering] * { cursor: grabbing; }
+
+.ycp-organization-group + .ycp-organization-group { border-top: 1px solid var(--g-color-line-generic); margin-top: 4px; padding-top: 4px; }
+.ycp-organization-row { display: grid; grid-template-columns: 28px 20px minmax(0, 1fr) auto; align-items: center; gap: 4px; min-height: 36px; padding: 2px 8px; }
+.ycp-organization-row > .g-text { overflow-wrap: anywhere; }
+.ycp-organization-row > .g-icon { justify-self: center; color: var(--g-color-text-secondary); }
+.ycp-organization-row > .g-text:last-child { padding-inline: 4px; }
+[data-compact] .ycp-organization-row { min-height: 28px; }
+[data-compact] .ycp-organization-row > .g-button::before,
+[data-compact] .ycp-organization-row > .g-button::after { inset: 2px; }

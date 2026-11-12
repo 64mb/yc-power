@@ -30,6 +30,18 @@
     try {
       const url = new URL(href, origin);
       if (url.origin !== origin) return null;
+      if (url.pathname === '/auth/move') {
+        const params = url.searchParams;
+        const regionId = params.get('targetRegionId');
+        const targetPath = params.get('targetPath');
+        const allowed = ['targetRegionId', 'targetService', 'targetPath'];
+        if ([...params.keys()].some(key => !allowed.includes(key)) || allowed.some(key => params.getAll(key).length !== 1)) return null;
+        if (params.get('targetService') !== 'console' || !/^[a-z0-9-]{1,32}$/i.test(regionId || '') || !/^\/(?:clouds?|folders)\//.test(targetPath || '')) return null;
+        const target = new URL(targetPath, origin);
+        if (target.origin !== origin || target.search || target.hash) return null;
+        const item = route(target.pathname, origin);
+        return item ? {...item, href: url.pathname + url.search, regionId} : null;
+      }
       const path = url.pathname.split("/").filter(Boolean);
       if (["clouds", "cloud"].includes(path[0]) && path[1]) {
         return path[2]
@@ -52,6 +64,7 @@
       if (row.type === "cloud") {
         const old = clouds.get(row.id);
         current = {...old, ...row, folders: old?.folders || []};
+        if (!row.regionId) delete current.regionId;
         clouds.set(row.id, current);
       } else if (row.type === "folder") {
         const cloud = row.cloudId ? clouds.get(row.cloudId) : current;

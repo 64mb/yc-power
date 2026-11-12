@@ -10,6 +10,7 @@ import I18n from '../panel-i18n.js';
 
 const gravityCSS = __YCP_GRAVITY_CSS__;
 const folderIcons = {folder: Folder, terminal: Terminal, server: Server, database: Database, briefcase: Briefcase, network: NodesDown, container: Cube, git: CodeFork, cpu: Cpu, security: ShieldCheck, globe: Globe, key: Key, rocket: Rocket, settings: Gear, disk: HardDrive, archive: Archive, monitoring: ChartLine, alerts: Bell, testing: Flask, bug: Bug, connection: PlugConnection, layers: Layers, clock: Clock, code: Code};
+const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIcons).filter(([name]) => name !== 'folder'))};
 
 (function () {
   'use strict';
@@ -18,9 +19,10 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   const storage = globalThis.browser?.storage.local;
   const defaults = () => ({mine: [], initialized: false, width: 360, custom: {}, showAllModern: false});
   let organization = null, key = Core.scopeKey(location.origin, null), preferences = {};
+  const collapsedOrganizations = new Set();
   const layoutKey = `yc-power:${location.origin}:layout`;
   function rememberLayout() {
-    storage?.set({[layoutKey]: {scopeKey: key, width: state.width}}).catch(() => {});
+    storage?.set({[layoutKey]: {scopeKey: key, width: state.width, collapsedOrganizations: [...collapsedOrganizations]}}).catch(() => {});
   }
   const preferenceSync = Core.preferenceSync(preferences, (savedKey, snapshot) => storage?.set({[savedKey]: snapshot}));
   let state = {...defaults(), clouds: []};
@@ -29,7 +31,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   let tree, aside, host, root, shadow, observer, themeObserver, timer, saveTimer;
   let busy = false, native = false, allOpen = false, edit = null, stopped = false;
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
-  let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false;
+  let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false, foldersEnabled = true;
   const expanded = new Set();
   let revealedRoute = null, observedRouteTransition = null;
   let cloudDrag = null, pointerDrag = null, reorderFocus = null, reorderAnnouncement = '';
@@ -77,7 +79,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     };
     session.move = pointer => {
       if (pointer.pointerId !== session.pointerId || session.cancelled) return;
-      if (!(pointer.buttons & 1) || !orderingAvailable() || session.key !== key || !state.mine.includes(session.id)) { clearCloudDrag(); return; }
+      if (!(pointer.buttons & 1) || !orderingAvailable() || session.key !== key || !movableClouds().some(cloud => cloud.id === session.id)) { clearCloudDrag(); return; }
       session.x = pointer.clientX; session.y = pointer.clientY;
       if (!session.active && Math.hypot(session.x - session.startX, session.y - session.startY) < 6) return;
       pointer.preventDefault();
@@ -116,14 +118,47 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     window.addEventListener('blur', session.cancel);
   }
   function movableClouds() {
-    const clouds = new Map(scopedClouds().map(cloud => [cloud.id, cloud]));
-    return state.mine.map(id => clouds.get(id)).filter(Boolean);
+    const clouds = new Map(state.clouds.map(cloud => [cloud.id, cloud]));
+    if (!groupedOrganizations()) return state.mine.map(id => clouds.get(id)).filter(cloud => cloud && (cloud.organizationId || null) === (organization?.id || null));
+    return organizationGroups().flatMap(group => group.clouds);
+  }
+  function groupedOrganizations() {
+    return new Set(state.clouds.map(cloud => cloud.organizationId || '')).size > 1;
+  }
+  function organizationGroups() {
+    const groups = new Map();
+    for (const cloud of state.clouds) {
+      const id = cloud.organizationId || '';
+      if (!groups.has(id)) groups.set(id, {id, name: cloud.organizationName || t('unknownOrganization'), clouds: []});
+      groups.get(id).clouds.push(cloud);
+    }
+    return [...groups.values()].map(group => {
+      const settings = cloudSettings(group.clouds[0]);
+      const clouds = new Map(group.clouds.map(cloud => [cloud.id, cloud]));
+      return {...group, clouds: settings.mine.map(id => clouds.get(id)).filter(Boolean)};
+    }).filter(group => group.clouds.length);
+  }
+  function updateCloudSettings(cloud, update) {
+    const cloudKey = Core.scopeKey(location.origin, cloud.organizationId);
+    if (cloudKey === key) { update(state); save(); return; }
+    const settings = structuredClone(cloudSettings(cloud));
+    update(settings);
+    preferenceSync.stage(cloudKey, settings);
+    preferenceSync.flush(cloudKey).catch(() => { statusKey = 'saveFailed'; render(); });
+  }
+  function itemSettings(item, parent) {
+    const cloud = item.type === 'cloud' ? item : parent || state.clouds.find(cloud => cloud.id === item.cloudId || cloud.folders.some(folder => folder.id === item.id));
+    return cloud ? cloudSettings(cloud) : state;
   }
   function moveCloud(source, target, after, focus = false) {
-    const ordered = Core.reorderMine(state.mine, source, target, after);
+    const sourceCloud = state.clouds.find(cloud => cloud.id === source);
+    const targetCloud = state.clouds.find(cloud => cloud.id === target);
+    if (!sourceCloud || !targetCloud || (sourceCloud.organizationId || null) !== (targetCloud.organizationId || null)) return;
+    const settings = cloudSettings(sourceCloud);
+    const ordered = Core.reorderMine(settings.mine, source, target, after);
     clearCloudDrag();
-    if (ordered === state.mine) return;
-    state.mine = ordered;
+    if (ordered === settings.mine) return;
+    updateCloudSettings(sourceCloud, settings => { settings.mine = ordered; });
     if (focus) reorderFocus = {id: source, key};
     const visible = movableClouds();
     const cloud = visible.find(cloud => cloud.id === source);
@@ -132,11 +167,13 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   function orderingAvailable() {
     const count = scopedClouds().length;
-    return !native && !(state.showAllModern && organization && scanReady && count > 0 && count < 10);
+    return !native && (groupedOrganizations() || !(state.showAllModern && organization && scanReady && count > 0 && count < 10));
   }
   function acceptsCloudDrop(target) {
     const visible = movableClouds();
-    return orderingAvailable() && cloudDrag?.key === key && cloudDrag.id !== target && visible.some(c => c.id === cloudDrag.id) && visible.some(c => c.id === target);
+    const source = visible.find(cloud => cloud.id === cloudDrag?.id);
+    const destination = visible.find(cloud => cloud.id === target);
+    return orderingAvailable() && cloudDrag?.key === key && cloudDrag.id !== target && source && destination && (source.organizationId || null) === (destination.organizationId || null);
   }
   function hasNoFolders(id) {
     const cloud = state.clouds.find(cloud => cloud.id === id);
@@ -144,21 +181,30 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   function restoreExpanded() {
     expanded.clear();
-    const saved = Array.isArray(state.expandedClouds) ? state.expandedClouds : state.mine;
-    saved.forEach(id => { if (typeof id === 'string' && !hasNoFolders(id)) expanded.add(id); });
+    const scopes = groupedOrganizations() ? [...new Map(state.clouds.map(cloud => [cloud.organizationId || '', cloudSettings(cloud)])).values()] : [state];
+    for (const settings of scopes) {
+      const saved = Array.isArray(settings.expandedClouds) ? settings.expandedClouds : settings.mine;
+      saved.forEach(id => { if (typeof id === 'string' && !hasNoFolders(id)) expanded.add(id); });
+    }
   }
-  function rememberExpanded() { state.expandedClouds = [...expanded]; }
+  function rememberExpanded(cloudId) {
+    const cloud = state.clouds.find(cloud => cloud.id === cloudId);
+    const keep = settings => [...expanded].filter(id => settings.mine.includes(id) || state.clouds.some(item => item.id === id && (item.organizationId || null) === (cloud?.organizationId || organization?.id || null)));
+    if (!cloud || Core.scopeKey(location.origin, cloud.organizationId) === key) { state.expandedClouds = keep(state); return; }
+    updateCloudSettings(cloud, settings => { settings.expandedClouds = keep(settings); });
+  }
   function revealCurrentRoute() {
     const transition = `${key}:${location.href}`;
     if (observedRouteTransition !== transition) { observedRouteTransition = transition; revealedRoute = null; }
     if (revealedRoute === transition) return;
     const active = Core.route(location.href, location.origin);
     if (!active) { revealedRoute = transition; return; }
-    const cloud = scopedClouds().find(cloud => active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id));
+    const cloud = state.clouds.find(cloud => active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id));
     if (!cloud) return;
     revealedRoute = transition;
-    if (hasNoFolders(cloud.id)) return;
-    if (!expanded.has(cloud.id)) { expanded.add(cloud.id); rememberExpanded(); save(); }
+    if (collapsedOrganizations.delete(cloud.organizationId || '')) rememberLayout();
+    if (!cloudFoldersEnabled(cloud) || hasNoFolders(cloud.id)) return;
+    if (!expanded.has(cloud.id)) { expanded.add(cloud.id); rememberExpanded(cloud.id); save(); }
   }
   const catalogKey = `yc-power:${location.origin}:catalog`;
   let catalogSaveTimer;
@@ -199,7 +245,11 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     scanGeneration++; pendingFolders.clear(); loadedFolders.clear(); attemptedFolders.clear();
     if (busy) rescan = true;
   }
+  function cloudFoldersEnabled(cloud) {
+    return foldersEnabled && !cloud?.regionId;
+  }
   function queueFolderScan(id, force = false) {
+    if (!cloudFoldersEnabled(state.clouds.find(cloud => cloud.id === id))) return;
     const requestKey = folderKey(id);
     if (!force && attemptedFolders.has(requestKey)) return;
     pendingFolders.set(requestKey, {id, key, generation: scanGeneration});
@@ -226,10 +276,11 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     });
   }
   function queueExpandedFolders() {
-    const clouds = scopedClouds();
-    const allModern = state.showAllModern && organization && scanReady && clouds.length > 0 && clouds.length < 10;
+    if (!foldersEnabled) return;
+    const clouds = groupedOrganizations() ? state.clouds : scopedClouds();
+    const allModern = !groupedOrganizations() && state.showAllModern && organization && scanReady && clouds.length > 0 && clouds.length < 10;
     for (const cloud of clouds) {
-      if ((allModern || state.mine.includes(cloud.id)) && expanded.has(cloud.id) && !cloud.folders.length && !loadedFolders.has(folderKey(cloud.id))) queueFolderScan(cloud.id);
+      if ((allModern || cloudSettings(cloud).mine.includes(cloud.id)) && expanded.has(cloud.id) && !cloud.folders.length && !loadedFolders.has(folderKey(cloud.id))) queueFolderScan(cloud.id);
     }
   }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -253,12 +304,13 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     organization = next;
     if (nextKey === key) return;
     clearTimeout(saveTimer);
-    const {clouds} = state;
+    const {clouds, width} = state;
     preferenceSync.flush(key).catch(() => { statusKey = 'saveFailed'; render(); });
     clearCloudDrag();
     invalidateScans();
     key = nextKey;
     state = {...defaults(), ...structuredClone(preferences[key] || {}), clouds};
+    if (groupedOrganizations()) state.width = width;
     state.width = Math.min(440, Math.max(1, Number(state.width) || 360));
     edit = null; restoreExpanded();
     if (initialize) initializeMine();
@@ -271,13 +323,13 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     if (state.initialized) return;
     const active = Core.route(location.href, location.origin);
     const current = scopedClouds().find(c => active && (active.type === 'cloud' ? active.id === c.id : active.cloudId === c.id || c.folders.some(f => f.id === active.id)));
-    if (current) { state.mine = [current.id]; state.initialized = true; if (!hasNoFolders(current.id)) expanded.add(current.id); rememberExpanded(); save(); }
+    if (current) { state.mine = [current.id]; state.initialized = true; if (!hasNoFolders(current.id)) expanded.add(current.id); rememberExpanded(current.id); save(); }
   }
   function display(item, parent) {
-    return state.custom[`${item.type}:${item.id}`]?.label || Core.label(item.name, parent?.name);
+    return itemSettings(item, parent).custom[`${item.type}:${item.id}`]?.label || Core.label(item.name, parent?.name);
   }
   function itemColor(item) {
-    return state.custom[`${item.type}:${item.id}`]?.color || Core.color(item.id);
+    return itemSettings(item).custom[`${item.type}:${item.id}`]?.color || Core.color(item.id);
   }
   function setNativeVisibility() {
     if (nativeReturnSlot) nativeReturnSlot.style.display = native ? 'inline-flex' : 'none';
@@ -336,7 +388,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       const a = el.querySelector('a[href]');
       const item = a && Core.route(a.getAttribute('href'), location.origin);
       if (!item || !a.title) return [];
-      return [{...item, name: a.title, offset, pinned: raw.endsWith('.pinned')}];
+      return [{...item, regionId: item.regionId, name: a.title, offset, pinned: raw.endsWith('.pinned')}];
     }));
   }
   function collectRow(rows, row) {
@@ -369,7 +421,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
             cloud = {...item, ...annotated, name: row.querySelector('a').title, folders: []};
             state.clouds.push(cloud);
           } else if (annotated) Object.assign(cloud, annotated);
-          if (cloud.organizationId && (!organization || !Core.currentOrganization(state.clouds, location.href, location.origin))) {
+          if (!groupedOrganizations() && cloud.organizationId && (!organization || !Core.currentOrganization(state.clouds, location.href, location.origin))) {
             syncOrganization({id: cloud.organizationId, name: cloud.organizationName || cloud.organizationId}, false);
           }
           native = false; allOpen = true; setNativeVisibility();
@@ -415,6 +467,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     void scan();
   }
   async function scan(target) {
+    if (target && !cloudFoldersEnabled(state.clouds.find(cloud => cloud.id === target))) return;
     if (startupRetryTimer !== null || startupRetryQueued) {
       if (target) queueFolderScan(target, true);
       return;
@@ -491,12 +544,13 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       if (target && found) loadedFolders.add(folderKey(target));
       scanReady = true;
       syncOrganization(); initializeMine();
-      if (target && found && hasNoFolders(target) && expanded.delete(target)) { rememberExpanded(); save(); }
+      if (!target) restoreExpanded();
+      if (target && found && hasNoFolders(target) && expanded.delete(target)) { rememberExpanded(target); save(); }
       statusKey = 'cloudCount'; statusArgs = {count: scopedClouds().length};
       if (target && !found) statusKey = 'notFound';
       if (!target) {
-        for (const cloud of scopedClouds()) {
-          if (state.mine.includes(cloud.id)) queueFolderScan(cloud.id, true);
+        for (const cloud of groupedOrganizations() ? state.clouds : scopedClouds()) {
+          if (cloudSettings(cloud).mine.includes(cloud.id)) queueFolderScan(cloud.id, true);
         }
       }
     } catch (error) {
@@ -512,36 +566,37 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     }
   }
   function toggleMine(cloud) {
-    if ((cloud.organizationId || null) !== (organization?.id || null)) {
-      const cloudKey = Core.scopeKey(location.origin, cloud.organizationId);
-      const settings = structuredClone(cloudSettings(cloud));
-      const mine = settings.mine.includes(cloud.id);
-      const savedExpanded = Array.isArray(settings.expandedClouds) ? settings.expandedClouds : settings.mine;
-      settings.expandedClouds = mine ? savedExpanded : [...new Set([...savedExpanded, cloud.id])];
+    const mine = cloudSettings(cloud).mine.includes(cloud.id);
+    updateCloudSettings(cloud, settings => {
       settings.mine = mine ? settings.mine.filter(id => id !== cloud.id) : [...settings.mine, cloud.id];
       settings.initialized = true;
-      preferenceSync.stage(cloudKey, settings);
-      preferenceSync.flush(cloudKey).catch(() => { statusKey = 'saveFailed'; render(); });
-      decorateNative();
-      return;
-    }
-    const mine = state.mine.includes(cloud.id);
-    state.mine = mine ? state.mine.filter(id => id !== cloud.id) : [...state.mine, cloud.id];
-    state.initialized = true;
+    });
     if (!mine && !hasNoFolders(cloud.id)) expanded.add(cloud.id);
-    rememberExpanded();
+    if (!mine && collapsedOrganizations.delete(cloud.organizationId || '')) rememberLayout();
+    rememberExpanded(cloud.id);
     save(); render(); decorateNative();
     if (!mine && !cloud.folders.length) queueFolderScan(cloud.id);
   }
-  function folderIconName(id) {
-    const icon = state.custom[`folder:${id}`]?.icon;
-    return Object.hasOwn(folderIcons, icon) ? icon : 'folder';
+  function itemIconName(item) {
+    const icons = item.type === 'cloud' ? cloudIcons : folderIcons;
+    const icon = itemSettings(item).custom[`${item.type}:${item.id}`]?.icon;
+    return Object.hasOwn(icons, icon) ? icon : item.type === 'cloud' ? 'cloud' : 'folder';
   }
   function customize(item, parent) {
+    if (edit?.key === `${item.type}:${item.id}`) { edit = null; render(); return; }
     const probe = document.createElement('span'); probe.style.color = itemColor(item); shadow.append(probe);
     const rgb = getComputedStyle(probe).color.match(/\d+/g); probe.remove();
-    edit = {key: `${item.type}:${item.id}`, type: item.type, icon: folderIconName(item.id), name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
+    edit = {cloudId: (item.type === 'cloud' ? item : parent)?.id, key: `${item.type}:${item.id}`, type: item.type, iconsEnabled: item.type === 'folder' || !cloudFoldersEnabled(item), icon: itemIconName(item), name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
     render();
+  }
+  function saveCustomization(value) {
+    const cloud = state.clouds.find(cloud => cloud.id === edit.cloudId);
+    if (!cloud) { edit = null; render(); return; }
+    updateCloudSettings(cloud, settings => {
+      if (value) settings.custom[edit.key] = {...settings.custom[edit.key], ...value};
+      else delete settings.custom[edit.key];
+    });
+    edit = null; render();
   }
   function safeHref(item) {
     const route = Core.route(item.href, location.origin);
@@ -549,35 +604,36 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   function Item({item, parent, draggable = false}) {
     const empty = item.type === 'cloud' && hasNoFolders(item.id);
-    const current = item.type === 'folder' && location.pathname.split('/').includes(item.id);
+    const active = Core.route(location.href, location.origin);
+    const current = item.type === 'folder' ? location.pathname.split('/').includes(item.id) : !cloudFoldersEnabled(item) && Boolean(active && (active.type === 'cloud' ? active.id === item.id : active.cloudId === item.id || item.folders.some(folder => folder.id === active.id)));
     return <div className={`ycp-row ycp-${item.type}`} data-current={current || undefined} draggable={false} data-reorderable={draggable || undefined} tabIndex={draggable ? 0 : undefined} role={draggable ? 'group' : undefined} aria-label={draggable ? t('reorderCloud', {name: display(item)}) : undefined} aria-keyshortcuts={draggable ? 'Alt+ArrowUp Alt+ArrowDown' : undefined} onKeyDown={event => {
       if (!draggable || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation();
-      const clouds = movableClouds();
+      const clouds = movableClouds().filter(cloud => (cloud.organizationId || null) === (item.organizationId || null));
       const index = clouds.findIndex(cloud => cloud.id === item.id);
       const next = clouds[index + (event.key === 'ArrowUp' ? -1 : 1)];
       if (next) moveCloud(item.id, next.id, event.key === 'ArrowDown', true);
     }} onPointerDown={event => { if (draggable) beginCloudDrag(event, item); }} onDragStart={draggable ? event => event.preventDefault() : undefined}>
-      {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={!empty && expanded.has(item.id)} disabled={empty} onClick={event => {
+      {item.type === 'cloud' && (cloudFoldersEnabled(item) ? <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={!empty && expanded.has(item.id)} disabled={empty} onClick={event => {
         if (expanded.has(item.id)) expanded.delete(item.id);
         else { expanded.add(item.id); if (!item.folders.length) queueFolderScan(item.id); }
         if (event.detail > 0) event.currentTarget.blur();
-        rememberExpanded(); save(); render();
-      }}><Icon data={!empty && expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
+        rememberExpanded(item.id); save(); render();
+      }}><Icon data={!empty && expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button> : <span className="ycp-disclosure-space"/>)}
       {item.type === 'folder' && <span className="ycp-indent"/>}
-      <span className="ycp-item-icon" title={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? Cloud : folderIcons[folderIconName(item.id)]} size={16}/></span>
+      <span className="ycp-item-icon" title={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item)]} size={16}/></span>
       <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
-      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(state.mine.includes(item.id) ? 'remove' : 'add')} title={t(state.mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={state.mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
+      {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} title={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={cloudSettings(item).mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
-      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} title={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
+      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} aria-expanded={edit?.key === `${item.type}:${item.id}`} title={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
     </div>;
   }
   function EditActions({measurement = false}) {
     return <div className="ycp-actions">
       <Button size="s" view="action" type={measurement ? 'button' : 'submit'} tabIndex={measurement ? -1 : undefined}><Icon data={FloppyDisk} size={16}/>{t('save')}</Button>
-      <Button size="s" view="outlined-utility" tabIndex={measurement ? -1 : undefined} onClick={measurement ? undefined : () => { delete state.custom[edit.key]; edit = null; save(); render(); }}><Icon data={ArrowRotateLeft} size={16}/>{t('auto')}</Button>
+      <Button size="s" view="outlined-utility" tabIndex={measurement ? -1 : undefined} onClick={measurement ? undefined : () => { saveCustomization(null); }}><Icon data={ArrowRotateLeft} size={16}/>{t('auto')}</Button>
       <Button size="s" view="flat-secondary" tabIndex={measurement ? -1 : undefined} onClick={measurement ? undefined : () => { edit = null; render(); }}><Icon data={Xmark} size={16}/>{t('cancel')}</Button>
     </div>;
   }
@@ -606,16 +662,19 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     }, []);
     const theme = document.body.className.match(/g-root_theme_(light-hc|dark-hc|light|dark)(?:\s|$)/)?.[1] || 'light';
     const currentClouds = scopedClouds();
-    const allModern = state.showAllModern && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10;
+    const allModern = !groupedOrganizations() && state.showAllModern && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10;
     const mine = allModern ? currentClouds : movableClouds();
+    const grouped = groupedOrganizations();
+    const editIcons = edit?.type === 'cloud' ? cloudIcons : folderIcons;
+    const groups = grouped ? organizationGroups() : [{id: '', clouds: mine}];
     const folderNames = new Intl.Collator(consoleLanguage(), {sensitivity: 'base', numeric: true});
     return <ThemeProvider theme={theme} scoped lang={consoleLanguage()} rootClassName="ycp-root"><div className="ycp-layout" style={themeOverrides} data-all-open={allOpen || undefined} data-edit-open={Boolean(edit) || undefined} data-compact={compactDensity || undefined}>
       {native ? (() => {
         const button = <ThemeProvider theme={theme} scoped lang={consoleLanguage()}><span style={themeOverrides}><Button view="flat-secondary" size="m" title={t('back')} aria-label={t('back')} onClick={() => { native = false; setNativeVisibility(); render(); }}><Icon data={ArrowLeft} size={16}/></Button></span></ThemeProvider>;
         return nativeReturnTarget ? createPortal(button, nativeReturnTarget) : <div className="ycp-native-fallback">{button}</div>;
       })() : <>
-        <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{organization && <Text className="ycp-organization" variant="caption-2" color="secondary" title={organization.name}>{organization.name}</Text>}</div>
-          {organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
+        <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{!grouped && organization && <Text className="ycp-organization" variant="caption-2" color="secondary" title={organization.name}>{organization.name}</Text>}</div>
+          {!grouped && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
           <Button view="flat-secondary" size="m" title={t('refresh')} aria-label={t('refresh')} loading={busy} onClick={refreshClouds}><Icon data={ArrowRotateRight} size={16}/></Button>
           <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); pauseTreeScan(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
         </div>
@@ -625,30 +684,40 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         <div className="ycp-reorder-status" role="status" aria-live="polite">{reorderAnnouncement}</div>
         <div className="ycp-mine">
           {!mine.length && <div className="ycp-note">{t('empty')}</div>}
-          {mine.map(cloud => {
+          {groups.map(group => <div key={group.id} className={grouped ? 'ycp-organization-group' : undefined} data-organization-id={grouped ? group.id : undefined}>
+            {grouped && <div className="ycp-organization-row">
+              <Button view="flat-secondary" size="m" aria-label={t('organizationClouds', {name: group.name})} aria-expanded={!collapsedOrganizations.has(group.id)} onClick={event => {
+                if (collapsedOrganizations.has(group.id)) collapsedOrganizations.delete(group.id); else collapsedOrganizations.add(group.id);
+                if (event.detail > 0) event.currentTarget.blur();
+                rememberLayout(); render();
+              }}><Icon data={collapsedOrganizations.has(group.id) ? ChevronRight : ChevronDown} size={16}/></Button>
+              <Icon data={Briefcase} size={16}/><Text variant="body-1" title={group.name}>{group.name}</Text>
+              <Text variant="caption-2" color="secondary">{group.clouds.length}</Text>
+            </div>}
+            {(!grouped || !collapsedOrganizations.has(group.id)) && group.clouds.map(cloud => {
             const folders = [...cloud.folders].sort((a, b) => folderNames.compare(display(a, cloud), display(b, cloud)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
             return <section className="ycp-group" key={cloud.id} data-cloud-id={cloud.id}>
               <Item item={cloud} draggable={!allModern}/>
-              {expanded.has(cloud.id) && !hasNoFolders(cloud.id) && <>
+              {cloudFoldersEnabled(cloud) && expanded.has(cloud.id) && !hasNoFolders(cloud.id) && <>
                 {folders.map(folder => <Item key={folder.id} item={folder} parent={cloud}/>)}
               </>}
             </section>;
-          })}
+          })}</div>)}
         </div>
-        {edit && <form className="ycp-edit" onSubmit={event => { event.preventDefault(); if (!/^#[0-9a-f]{6}$/i.test(edit.color)) return; state.custom[edit.key] = {label: edit.label.trim(), color: edit.color, ...(edit.type === 'folder' && Object.hasOwn(folderIcons, edit.icon) ? {icon: edit.icon} : {})}; edit = null; save(); render(); }}>
+        {edit && <form className="ycp-edit" onSubmit={event => { event.preventDefault(); if (!/^#[0-9a-f]{6}$/i.test(edit.color)) return; saveCustomization({label: edit.label.trim(), color: edit.color, ...(edit.iconsEnabled && Object.hasOwn(editIcons, edit.icon) ? {icon: edit.icon} : {})}); }}>
           <Text variant="caption-2">{edit.name}</Text>
           <TextInput value={edit.label} maxLength={120} controlProps={{'aria-label': t('label')}} onUpdate={value => { edit.label = value; render(); }}/>
           {Object.entries(Core.palettes).map(([name, colors]) => <div className="ycp-palette-group" key={name}>
             <div className="ycp-palette-heading"><Label theme={name === 'power' ? 'utility' : 'info'} size="xs">{t(name)}</Label></div>
             <Palette className="ycp-palette" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.color]} aria-label={`${t('palette')}: ${t(name)}`} options={colors.map(color => ({value: color, title: color, content: <span className="ycp-swatch" style={{backgroundColor: color}}/>}))} onUpdate={values => { if (values[0]) { edit.color = values[0]; render(); } }}/>
           </div>)}
-          {edit.type === 'folder' && <div className="ycp-palette-group ycp-icons-group">
+          {edit.iconsEnabled && <div className="ycp-palette-group ycp-icons-group">
             <div className="ycp-palette-heading"><Label theme="info" size="xs">{t('icons')}</Label></div>
-            <Palette className="ycp-palette ycp-icons" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.icon]} aria-label={t('icons')} options={Object.entries(folderIcons).map(([value, data]) => ({value, title: t(`icon_${value}`), content: <span className="ycp-icon-option" style={{color: edit.color}}><Icon data={data} size={16}/></span>}))} onUpdate={values => { if (Object.hasOwn(folderIcons, values[0])) { edit.icon = values[0]; render(); } }}/>
+            <Palette className="ycp-palette ycp-icons" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.icon]} aria-label={t('icons')} options={Object.entries(editIcons).map(([value, data]) => ({value, title: t(`icon_${value}`), content: <span className="ycp-icon-option" style={{color: edit.color}}><Icon data={data} size={16}/></span>}))} onUpdate={values => { if (Object.hasOwn(editIcons, values[0])) { edit.icon = values[0]; render(); } }}/>
           </div>}
           <EditActions/>
         </form>}
-        <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { if (!allOpen) pauseTreeScan(); allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{currentClouds.length || ''}</Text></div></div>
+        <div className="ycp-toggle"><div className="ycp-all-row" onClick={() => { if (!allOpen) pauseTreeScan(); allOpen = !allOpen; setNativeVisibility(); render(); }}><Button view="flat-secondary" size="m" aria-label={t('all')} aria-expanded={allOpen}><Icon data={allOpen ? ChevronDown : ChevronRight} size={16}/></Button><span className="ycp-all-label">{t('all')}</span><Text color="secondary">{(grouped ? state.clouds.length : currentClouds.length) || ''}</Text></div></div>
 
       </>}
       <div ref={measureRef} className="ycp-action-measure" aria-hidden="true"><EditActions measurement/></div>
@@ -742,13 +811,17 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   globalThis.browser?.storage.onChanged.addListener((changes, area) => {
     if (stopped || area !== 'local') return;
+    if (changes.cloudOnlyHosts) {
+      const enabled = !Array.isArray(changes.cloudOnlyHosts.newValue) || !changes.cloudOnlyHosts.newValue.includes(location.origin);
+      if (enabled !== foldersEnabled) { foldersEnabled = enabled; if (enabled) revealedRoute = null; edit = null; invalidateScans(); rescan = true; render(); }
+    }
     if (changes.compactDensity) { compactDensity = changes.compactDensity.newValue === true; render(); }
     if (changes.domainHosts && !changes.domainHosts.newValue?.includes(location.origin)) { cleanup(); return; }
     const prefix = `yc-power:${location.origin}:organization:`;
-    let activeChanged = false;
+    let activeChanged = false, anyChanged = false;
     for (const [changedKey, change] of Object.entries(changes)) {
       if (!changedKey.startsWith(prefix)) continue;
-      if (preferenceSync.receive(changedKey, change.newValue) && changedKey === key) activeChanged = true;
+      if (preferenceSync.receive(changedKey, change.newValue)) { anyChanged = true; if (changedKey === key) activeChanged = true; }
     }
     if (activeChanged) {
       clearCloudDrag();
@@ -757,6 +830,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       restoreExpanded();
       applyWidth(); render();
     }
+    if (anyChanged && !activeChanged) { restoreExpanded(); render(); }
     decorateNative();
   });
   async function start() {
@@ -766,7 +840,9 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         if (!Object.hasOwn(preferences, storedKey)) preferenceSync.receive(storedKey, settings);
       }
       compactDensity = storedPreferences.compactDensity === true;
+      foldersEnabled = !Array.isArray(storedPreferences.cloudOnlyHosts) || !storedPreferences.cloudOnlyHosts.includes(location.origin);
       const layout = storedPreferences[layoutKey];
+      if (Array.isArray(layout?.collapsedOrganizations)) layout.collapsedOrganizations.filter(id => typeof id === 'string').forEach(id => collapsedOrganizations.add(id));
       const prefix = `yc-power:${location.origin}:organization:`;
       const visibleOrganizations = [...new Set([...document.querySelectorAll('.console-dashboard-layout__aside [data-list-item^="organization."]')].map(row => row.dataset.listItem.slice(13)))];
       const visibleKey = visibleOrganizations.length === 1 ? Core.scopeKey(location.origin, visibleOrganizations[0]) : null;

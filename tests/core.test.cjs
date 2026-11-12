@@ -58,3 +58,21 @@ test('catalog cache keeps validated routes and strips unrelated fields', () => {
   assert.equal(result[0].folders[0].extra, undefined);
   assert.equal(result[0].folders[0].cloudId, 'cloud-alpha');
 });
+
+test('regional console links preserve their native destination through cache validation', () => {
+  const href = '/auth/move?targetRegionId=region-beta&targetService=console&targetPath=%2Fcloud%2Fcloud-regional';
+  assert.deepEqual(route(href, origin), {type: 'cloud', id: 'cloud-regional', href, regionId: 'region-beta'});
+  const {catalogCache} = require('../core.js');
+  const cached = catalogCache([{id: 'cloud-regional', name: 'Regional cloud', href, organizationId: 'org-regional', folders: []}], origin);
+  assert.equal(cached[0].regionId, 'region-beta');
+  assert.equal(cached[0].href, href);
+  const local = catalog([{type: 'cloud', id: 'cloud-regional', name: 'Local cloud', href: '/clouds/cloud-regional', offset: 0}], cached);
+  assert.equal(local[0].regionId, undefined);
+  assert.equal(local[0].href, '/clouds/cloud-regional');
+  for (const target of ['https://other.example/cloud/a', '//other.example/cloud/a', '/auth/move', '/cloud/a?redirect=other', '/services/a']) {
+    assert.equal(route('/auth/move?targetRegionId=region-beta&targetService=console&targetPath=' + encodeURIComponent(target), origin), null);
+  }
+  for (const suffix of ['&targetRegionId=another', '&redirect=https://other.example']) assert.equal(route(href + suffix, origin), null);
+  assert.equal(route(href.replace('targetService=console', 'targetService=center'), origin), null);
+  assert.equal(route(href.replace('region-beta', '..'), origin), null);
+});

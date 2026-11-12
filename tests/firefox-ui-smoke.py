@@ -256,6 +256,12 @@ def exercise(driver, origin, scenario):
         driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder");')
         initial = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-item-icon .g-icon").innerHTML;')
         driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action")')
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action")')
+        driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action").getAttribute("aria-expanded");') == 'false'
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action")')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");')
+        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action").getAttribute("aria-expanded");') == 'true'
         grid = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);')
         assert grid == [8, 8, 8], grid
         preset = driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons button[value=database] .g-icon").innerHTML;')
@@ -294,11 +300,190 @@ def exercise(driver, origin, scenario):
     if scenario == 'failed':
         driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-header")&&r.textContent.includes("Could not read");')
         return {'scenario': scenario, 'defaultView': 'my clouds retained after scan failure'}
+    if scenario == 'multi-regional':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        alpha = root + '.querySelector(".ycp-organization-group[data-organization-id=org-alpha]")'
+        beta = root + '.querySelector(".ycp-organization-group[data-organization-id=org-beta]")'
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
+        href = driver.evaluate('return ' + beta + '.querySelector(".ycp-cloud .ycp-link").getAttribute("href");')
+        assert driver.evaluate('const u=new URL(' + json.dumps(href) + ',location.origin);return {path:u.pathname,region:u.searchParams.get("targetRegionId"),service:u.searchParams.get("targetService"),target:u.searchParams.get("targetPath")};') == {'path': '/auth/move', 'region': 'region-beta', 'service': 'console', 'target': '/cloud/cloud-beta'}
+        assert not driver.evaluate('return !!' + beta + '.querySelector(".ycp-cloud > button:first-child[aria-expanded],.ycp-folder");')
+        assert driver.evaluate('return !!' + alpha + '.querySelector(".ycp-folder");')
+        driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+        driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-beta\\"] .ycp-add-native")')
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-beta"].mine.length===0;')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return !' + root + '.querySelector(".ycp-organization-group[data-organization-id=org-beta]");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-beta\\"] .ycp-add-native")')
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-beta"].mine.includes("cloud-beta");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return !!' + beta + '?.querySelector(".ycp-cloud");')
+        assert driver.evaluate('return ' + beta + '.querySelector(".ycp-cloud .ycp-link").getAttribute("href");') == href
+        for group in [alpha, beta]:
+            driver.click(group + '.querySelector(".ycp-organization-row button[aria-expanded]")')
+        driver.wait('const ids=fixture.memory["yc-power:"+location.origin+":layout"].collapsedOrganizations;return ids.includes("org-alpha")&&ids.includes("org-beta");')
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=multi-regional'})
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-organization-row button[aria-expanded=false]").length===2;')
+        driver.click(alpha + '.querySelector(".ycp-organization-row button[aria-expanded]")')
+        driver.wait('return !!' + alpha + '.querySelector(".ycp-cloud");')
+        assert driver.evaluate('return ' + beta + '.querySelector(".ycp-organization-row button").getAttribute("aria-expanded");') == 'false'
+        assert not driver.evaluate('return !!' + beta + '.querySelector(".ycp-cloud");')
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        return {'scenario': scenario, 'regionalCloud': 'native regional href retained without folder expansion', 'selection': 'native minus and plus work', 'collapse': 'both groups persist independently across reload'}
+    if scenario == 'multi-grouped':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        alpha = root + '.querySelector(".ycp-organization-group[data-organization-id=org-alpha]")'
+        beta = root + '.querySelector(".ycp-organization-group[data-organization-id=org-beta]")'
+        prefix = '"yc-power:"+location.origin'
+        alpha_prefs = 'fixture.memory[' + prefix + '+":organization:id:org-alpha"]'
+        beta_prefs = 'fixture.memory[' + prefix + '+":organization:id:org-beta"]'
+        layout = 'fixture.memory[' + prefix + '+":layout"]'
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===3;')
+        assert driver.evaluate('return Array.from(' + root + '.querySelectorAll(".ycp-organization-group")).map(e=>e.dataset.organizationId);') == ['org-alpha', 'org-beta']
+        assert driver.evaluate('return Array.from(' + alpha + '.querySelectorAll(".ycp-group")).map(e=>e.dataset.cloudId);') == ['cloud-alpha', 'cloud-analytics']
+        assert 'Alpha selected' in driver.evaluate('return ' + alpha + '.textContent;')
+        assert 'Beta custom folder' in driver.evaluate('return ' + beta + '.textContent;')
+        colors = driver.evaluate('return ["cloud-alpha","cloud-beta"].map(id=>getComputedStyle(' + root + '.querySelector("[data-cloud-id="+id+"] .ycp-cloud .ycp-item-icon")).color);')
+        assert colors == ['rgb(17, 34, 51)', 'rgb(68, 85, 102)'], colors
+        icons = driver.evaluate('return ["cloud-alpha","cloud-beta"].map(id=>' + root + '.querySelector("[data-cloud-id="+id+"] .ycp-folder .g-icon").innerHTML);')
+        assert icons[0] != icons[1], icons
+        driver.click(beta + '.querySelector(".ycp-organization-row button[aria-expanded]")')
+        driver.wait('return ' + layout + '.collapsedOrganizations.includes("org-beta");')
+        driver.evaluate('const key="yc-power:"+location.origin+":organization:id:org-beta",prefs=structuredClone(fixture.memory[key]);prefs.expandedClouds=[];browser.storage.local.set({[key]:prefs});return true;')
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=multi-grouped'})
+        driver.wait('return ' + beta + '?.querySelector(".ycp-organization-row button[aria-expanded=false]");')
+        assert not driver.evaluate('return !!' + beta + '.querySelector(".ycp-cloud");')
+        assert driver.evaluate('return ' + alpha + '.querySelectorAll(".ycp-cloud").length;') == 2
+        driver.evaluate('history.pushState(null,"","/clouds/cloud-beta/folder-beta");window.dispatchEvent(new PopStateEvent("popstate"));return true;')
+        driver.wait('return ' + beta + '.querySelector(".ycp-organization-row button[aria-expanded=true]")&&' + beta + '.querySelector(".ycp-folder");')
+        driver.click(beta + '.querySelector(".ycp-folder .ycp-row-action")')
+        driver.wait('return !!' + root + '.querySelector(".ycp-edit");')
+        driver.evaluate('const e=' + root + '.querySelector(".ycp-edit input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(e,"Beta edited folder");e.dispatchEvent(new Event("input",{bubbles:true}));return true;')
+        driver.click(root + '.querySelector(".ycp-icons button[value=rocket]")')
+        driver.evaluate(root + '.querySelector(".ycp-edit button[type=submit]").scrollIntoView({block:"nearest"});return true;')
+        driver.click(root + '.querySelector(".ycp-edit button[type=submit]")')
+        driver.wait('return ' + beta_prefs + '.custom["folder:folder-beta"]?.label==="Beta edited folder";')
+        assert driver.evaluate('return ' + beta_prefs + '.custom["folder:folder-beta"].icon;') == 'rocket'
+        assert driver.evaluate('return ' + alpha_prefs + '.custom["folder:folder-beta"]||null;') is None
+        assert driver.evaluate('return ' + alpha_prefs + '.custom["folder:folder-alpha"].label;') == 'Alpha custom folder'
+        driver.evaluate(root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud").focus();return true;')
+        def move_cloud(arrow):
+            driver.command('WebDriver:PerformActions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': [{'type': 'keyDown', 'value': '\ue00a'}, {'type': 'keyDown', 'value': arrow}, {'type': 'keyUp', 'value': arrow}, {'type': 'keyUp', 'value': '\ue00a'}]}]})
+        move_cloud('\ue015')
+        driver.wait('return ' + alpha_prefs + '.mine.join(",")==="cloud-analytics,cloud-alpha";')
+        move_cloud('\ue015')
+        assert driver.evaluate('return ' + alpha_prefs + '.mine;') == ['cloud-analytics', 'cloud-alpha']
+        assert driver.evaluate('return ' + beta_prefs + '.mine;') == ['cloud-beta']
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-beta\\"] .ycp-add-native")')
+        driver.wait('return ' + beta_prefs + '.mine.length===0;')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return !' + root + '.querySelector(".ycp-organization-group[data-organization-id=org-beta]");')
+        assert driver.evaluate('return ' + alpha + '.querySelectorAll(".ycp-cloud").length;') == 2
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-beta\\"] .ycp-add-native")')
+        driver.wait('return ' + beta_prefs + '.mine.includes("cloud-beta");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return ' + beta + '?.textContent.includes("Beta edited folder");')
+        return {'scenario': scenario, 'groups': 'all saved selections with independent custom data', 'collapse': 'restored on reload and opened by route', 'editing': 'saved to owner organization', 'reorder': 'within organization only', 'selection': 'removing and adding another organization preserves Alpha'}
     if scenario == 'multi-saved':
         driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-cloud")&&r.textContent.includes("Beta organization");')
         widths = driver.evaluate('return [...new Set(fixture.widths)];')
         assert widths and all(abs(width - 320) < 1 for width in widths), widths
         return {'scenario': scenario, 'savedOrganization': 'restored', 'initialWidth': 'stable'}
+    if scenario == 'delayed-cloud-icons':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        cloud = root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-cloud")'
+        prefs = 'fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"]'
+        driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-cloud");')
+        default_icon = driver.evaluate('return ' + cloud + '.querySelector(".ycp-item-icon .g-icon").innerHTML;')
+        def edit_cloud():
+            driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+            driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color")')
+            driver.wait('return !!' + root + '.querySelector(".ycp-edit");')
+        edit_cloud()
+        initial_label = driver.evaluate('return ' + root + '.querySelector(".ycp-edit input").value;')
+        driver.evaluate('const e=' + root + '.querySelector(".ycp-edit input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(e,"Unsaved cloud draft");e.dispatchEvent(new Event("input",{bubbles:true}));return true;')
+        driver.click('Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color")')
+        driver.wait('return !' + root + '.querySelector(".ycp-edit");')
+        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color").getAttribute("aria-expanded");') == 'false'
+        assert not driver.evaluate('return !!' + prefs + '.custom["cloud:cloud-alpha"];')
+        edit_cloud()
+        assert driver.evaluate('return ' + root + '.querySelector(".ycp-edit input").value;') == initial_label
+        assert driver.evaluate('return Array.from(' + cloud + '.querySelectorAll("button")).find(b=>b.title==="Label and color").getAttribute("aria-expanded");') == 'true'
+        assert driver.evaluate('return Array.from(' + root + '.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);') == [8, 8, 8]
+        assert driver.evaluate('return !!' + root + '.querySelector(".ycp-icons button[value=cloud]")&&!'+root+'.querySelector(".ycp-icons button[value=folder]");')
+        rocket = driver.evaluate('return ' + root + '.querySelector(".ycp-icons button[value=rocket] .g-icon").innerHTML;')
+        driver.click(root + '.querySelector(".ycp-icons button[value=rocket]")')
+        driver.click(root + '.querySelector(".ycp-edit button[type=submit]")')
+        driver.wait('return ' + prefs + '.custom["cloud:cloud-alpha"]?.icon==="rocket";')
+        assert driver.evaluate('return ' + cloud + '.querySelector(".ycp-item-icon .g-icon").innerHTML;') == rocket
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=delayed-cloud-icons'})
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-cloud .ycp-item-icon .g-icon")?.innerHTML===' + json.dumps(rocket) + ';')
+        for path in ['/clouds/cloud-alpha', '/clouds/cloud-alpha/folder-alpha', '/folders/folder-alpha']:
+            driver.evaluate('history.pushState(null,"",'+json.dumps(path)+');window.dispatchEvent(new PopStateEvent("popstate"));return true;')
+            driver.wait('return ' + cloud + '.hasAttribute("data-current")&&'+cloud+'.querySelector(".ycp-link").getAttribute("aria-current")==="page";')
+        driver.evaluate('history.pushState(null,"","/clouds/cloud-beta");window.dispatchEvent(new PopStateEvent("popstate"));return true;')
+        driver.wait('return !' + cloud + '.hasAttribute("data-current")&&!'+cloud+'.querySelector(".ycp-link").hasAttribute("aria-current");')
+        driver.evaluate('browser.storage.local.set({cloudOnlyHosts:[]});return true;')
+        driver.wait('return !!' + cloud + '.querySelector(":scope > button:first-child[aria-expanded]");')
+        assert driver.evaluate('return ' + cloud + '.querySelector(".ycp-item-icon .g-icon").innerHTML;') == default_icon
+        edit_cloud()
+        assert not driver.evaluate('return !!' + root + '.querySelector(".ycp-icons");')
+        driver.evaluate('const e=' + root + '.querySelector(".ycp-edit input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(e,"Cloud renamed");e.dispatchEvent(new Event("input",{bubbles:true}));return true;')
+        driver.click(root + '.querySelector(".ycp-edit button[type=submit]")')
+        driver.wait('return ' + prefs + '.custom["cloud:cloud-alpha"]?.label==="Cloud renamed";')
+        assert driver.evaluate('return ' + prefs + '.custom["cloud:cloud-alpha"].icon;') == 'rocket'
+        driver.evaluate('browser.storage.local.set({cloudOnlyHosts:[location.origin]});return true;')
+        driver.wait('return '+cloud+'.querySelector(".ycp-item-icon .g-icon").innerHTML===' + json.dumps(rocket) + ';')
+        edit_cloud()
+        driver.click('Array.from(' + root + '.querySelectorAll(".ycp-edit .ycp-actions button")).find(b=>b.textContent.trim()==="Auto")')
+        driver.wait('return !' + prefs + '.custom["cloud:cloud-alpha"];')
+        assert driver.evaluate('return ' + cloud + '.querySelector(".ycp-item-icon .g-icon").innerHTML;') == default_icon
+        return {'scenario': scenario, 'cloudIcons': '24 presets saved across reload with Auto reset', 'folderMode': 'fixed cloud icon retains dormant customization', 'currentCloud': 'cloud, nested folder and folder-only routes highlight owner'}
+    if scenario == 'delayed-clouds-only':
+        root = 'document.querySelector("[data-ycp-host]").shadowRoot'
+        driver.wait('return !!document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-cloud .ycp-link");')
+        def assert_clouds_only():
+            assert not driver.evaluate('return !!' + root + '.querySelector(".ycp-folder,.ycp-cloud > button:first-child[aria-expanded]");')
+        def refresh_clouds():
+            driver.click('Array.from(' + root + '.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+            driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+        assert_clouds_only()
+        refresh_clouds()
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        assert_clouds_only()
+        assert driver.evaluate('return ' + root + '.querySelector(".ycp-cloud .ycp-link").getAttribute("href");').endswith('/clouds/cloud-alpha')
+        driver.evaluate('const link=' + root + '.querySelector(".ycp-cloud .ycp-link");link.addEventListener("click",e=>{e.preventDefault();fixture.cloudLinkClicked=true},{once:true});return true;')
+        driver.click(root + '.querySelector(".ycp-cloud .ycp-link")')
+        assert driver.evaluate('return fixture.cloudLinkClicked;')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.click('document.querySelector("[data-list-item=\\"cloud.cloud-beta\\"] .ycp-add-native")')
+        driver.wait('return fixture.memory["yc-power:"+location.origin+":organization:id:org-alpha"].mine.includes("cloud-beta");')
+        driver.click(root + '.querySelector(".ycp-toggle button")')
+        driver.wait('return ' + root + '.querySelectorAll(".ycp-cloud").length===2;')
+        assert_clouds_only()
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        driver.evaluate('const key="yc-power:"+location.origin+":organization:id:org-alpha",prefs=structuredClone(fixture.memory[key]);prefs.expandedClouds=[];history.pushState(null,"","/clouds/cloud-alpha/folder-alpha");browser.storage.local.set({[key]:prefs});return true;')
+        driver.wait('return !' + root + '.querySelector(".ycp-folder");')
+        driver.evaluate('browser.storage.local.set({cloudOnlyHosts:["https://other.example"]});return true;')
+        driver.wait('return !!' + root + '.querySelector("[data-cloud-id=cloud-alpha] .ycp-folder")&&fixture.expansionClicks>0;', timeout=25)
+        driver.wait('return !' + root + '.querySelector(".ycp-status");', timeout=25)
+        driver.evaluate('browser.storage.local.set({cloudOnlyHosts:[location.origin]});return true;')
+        driver.wait('return !' + root + '.querySelector(".ycp-folder,.ycp-cloud > button:first-child[aria-expanded]");')
+        clicks = driver.evaluate('return fixture.expansionClicks;')
+        refresh_clouds()
+        assert driver.evaluate('return fixture.expansionClicks;') == clicks
+        driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=delayed-clouds-only'})
+        driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;')
+        assert_clouds_only()
+        refresh_clouds()
+        assert driver.evaluate('return fixture.expansionClicks;') == 0
+        return {'scenario': scenario, 'cloudsOnly': 'cached folders hidden and no native expansions', 'clouds': 'links and selection work', 'settings': 'live origin matching and reload persistence'}
     if scenario.startswith('delayed'):
         if scenario == 'delayed-cache':
             driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
@@ -413,7 +598,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:
