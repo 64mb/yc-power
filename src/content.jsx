@@ -34,7 +34,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
   let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false, foldersEnabled = true;
   const expanded = new Set();
-  let revealedRoute = null, observedRouteTransition = null;
+  let revealedRoute = null, observedRouteTransition = null, lastActiveCloudId = null;
   let cloudDrag = null, pointerDrag = null, reorderFocus = null, reorderAnnouncement = '';
   function clearCloudDrag() {
     cloudDrag = null;
@@ -194,13 +194,21 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     if (!cloud || Core.scopeKey(location.origin, cloud.organizationId) === key) { state.expandedClouds = keep(state); return; }
     updateCloudSettings(cloud, settings => { settings.expandedClouds = keep(settings); });
   }
+  function currentCloud() {
+    const selected = tree?.querySelector('[data-list-item^="cloud."][aria-selected="true"], [data-list-item^="cloud."].cloud-tree-list-item__item_selected');
+    const selectedRoute = Core.route(selected?.querySelector('a[href]')?.getAttribute('href'), location.origin);
+    const header = document.querySelector('.console-dashboard-header__cloud-icon')?.closest('.console-dashboard-header__entity-info');
+    const identifiers = new Set([...header?.querySelectorAll('.g-text') || []].map(node => node.textContent.trim()));
+    const headerCloud = state.clouds.find(cloud => identifiers.has(cloud.id));
+    return Core.currentCloud(state.clouds, location.href, location.origin, selectedRoute?.type === 'cloud' ? selectedRoute.id : headerCloud?.id);
+  }
   function revealCurrentRoute() {
-    const transition = `${key}:${location.href}`;
+    const cloud = currentCloud();
+    const transition = `${key}:${location.href}:${cloud?.id || ''}`;
     if (observedRouteTransition !== transition) { observedRouteTransition = transition; revealedRoute = null; }
     if (revealedRoute === transition) return;
     const active = Core.route(location.href, location.origin);
     if (!active) { revealedRoute = transition; return; }
-    const cloud = state.clouds.find(cloud => active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id));
     if (!cloud) return;
     revealedRoute = transition;
     if (collapsedOrganizations.delete(cloud.organizationId || '')) rememberLayout();
@@ -300,7 +308,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function syncOrganization(adopted, initialize = true) {
     if (adopted?.id) selectedOrganizationId = adopted.id;
-    const next = adopted || Core.currentOrganization(state.clouds, location.href, location.origin, selectedOrganizationId);
+    const next = adopted || Core.currentOrganization(state.clouds, location.href, location.origin, selectedOrganizationId, currentCloud()?.id);
     const nextKey = Core.scopeKey(location.origin, next?.id);
     organization = next;
     if (nextKey === key) return;
@@ -322,8 +330,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function initializeMine() {
     if (state.initialized) return;
-    const active = Core.route(location.href, location.origin);
-    const current = scopedClouds().find(c => active && (active.type === 'cloud' ? active.id === c.id : active.cloudId === c.id || c.folders.some(f => f.id === active.id)));
+    const active = currentCloud();
+    const current = scopedClouds().find(cloud => cloud.id === active?.id);
     if (current) { state.mine = [current.id]; state.initialized = true; if (!hasNoFolders(current.id)) expanded.add(current.id); rememberExpanded(current.id); save(); }
   }
   function display(item, parent) {
@@ -605,8 +613,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function Item({item, parent, draggable = false}) {
     const empty = item.type === 'cloud' && hasNoFolders(item.id);
-    const active = Core.route(location.href, location.origin);
-    const current = item.type === 'folder' ? location.pathname.split('/').includes(item.id) : !cloudFoldersEnabled(item) && Boolean(active && (active.type === 'cloud' ? active.id === item.id : active.cloudId === item.id || item.folders.some(folder => folder.id === active.id)));
+    const current = item.type === 'folder' ? location.pathname.split('/').includes(item.id) : !cloudFoldersEnabled(item) && currentCloud()?.id === item.id;
     return <div className={`ycp-row ycp-${item.type}`} data-current={current || undefined} draggable={false} data-reorderable={draggable || undefined} tabIndex={draggable ? 0 : undefined} role={draggable ? 'group' : undefined} aria-label={draggable ? t('reorderCloud', {name: display(item)}) : undefined} aria-keyshortcuts={draggable ? 'Alt+ArrowUp Alt+ArrowDown' : undefined} onKeyDown={event => {
       if (!draggable || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault(); event.stopPropagation();
@@ -870,7 +877,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
     timer = setInterval(() => {
       mount();
-      if (location.href !== lastUrl) { lastUrl = location.href; syncOrganization(); initializeMine(); render(); decorateNative(); }
+      const activeId = currentCloud()?.id || null;
+      if (location.href !== lastUrl || activeId !== lastActiveCloudId) { lastUrl = location.href; lastActiveCloudId = activeId; syncOrganization(); initializeMine(); render(); decorateNative(); }
     }, 1000);
   }
   void start();

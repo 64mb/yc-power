@@ -76,3 +76,14 @@ test('regional console links preserve their native destination through cache val
   assert.equal(route(href.replace('targetService=console', 'targetService=center'), origin), null);
   assert.equal(route(href.replace('region-beta', '..'), origin), null);
 });
+
+test('cloud-only navigation uses validated native selection when a folder has no cached owner', () => {
+  const {currentCloud, currentOrganization} = require('../core.js');
+  const clouds = [{id: 'cloud-alpha', organizationId: 'org-alpha', folders: []}, {id: 'cloud-beta', organizationId: 'org-beta', folders: [{id: 'known-folder'}]}];
+  const href = '/folders/unknown-folder/dashboard';
+  assert.equal(currentCloud(clouds, href, origin, 'cloud-alpha').id, 'cloud-alpha');
+  assert.equal(currentCloud(clouds, href, origin, 'missing-cloud'), null);
+  assert.equal(currentCloud(clouds, '/clouds/cloud-beta', origin, 'cloud-alpha').id, 'cloud-beta');
+  assert.equal(currentCloud(clouds, '/folders/known-folder/dashboard', origin, 'cloud-alpha').id, 'cloud-beta');
+  assert.equal(currentOrganization(clouds, href, origin, 'org-beta', 'cloud-alpha').id, 'org-alpha');
+});
