@@ -10,6 +10,7 @@ body { margin: 0; min-width: 0; width: 500px; max-width: 100%; background: var(-
 .settings-card p { margin: 0 0 12px; }
 .domain-list { display: grid; gap: 8px; margin-bottom: 8px; }
 .domain-row { display: flex; gap: 6px; min-width: 0; }
+.domain-row > .g-button { flex-shrink: 0; }
 .domain-row .g-text-input { flex: 1; min-width: 0; }
 .settings-card .settings-hint { margin-top: 12px; }
 .settings-appearance { border-top: 1px solid var(--g-color-line-generic); padding-top: 16px; margin-top: 16px; }
