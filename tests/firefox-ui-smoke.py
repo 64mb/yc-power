@@ -117,6 +117,26 @@ def pixel(image, x, y):
 
 def exercise(driver, origin, scenario):
     driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=' + scenario})
+    if scenario == 'delayed-controls':
+        driver.wait('return fixture.expansionClicks===1;', timeout=25)
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
+        visibility = driver.evaluate('const t=document.querySelector(".cloud-tree-list-container"),r=document.querySelector("[data-ycp-host]").shadowRoot;return {expanded:r.querySelector(".ycp-all-row button").getAttribute("aria-expanded"),inert:t.hasAttribute("inert"),covered:t.hasAttribute("data-ycp-covered")};')
+        assert visibility == {'expanded': 'true', 'inert': False, 'covered': False}, visibility
+        expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list");list.scrollTop=250;fixture.pauseAt=performance.now();return list.scrollTop;')
+        assert expected > 0
+        driver.wait('return performance.now()-fixture.pauseAt>1000;')
+        assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
+        driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
+        driver.wait('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("Loading");')
+        driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Default sidebar")')
+        driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
+        assert not driver.evaluate('return document.querySelector(".cloud-tree-list-container").hasAttribute("inert");')
+        expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list");list.scrollTop=400;fixture.pauseAt=performance.now();return list.scrollTop;')
+        driver.wait('return performance.now()-fixture.pauseAt>1000;')
+        assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
+        driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
+        driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder");', timeout=25)
+        return {'scenario': scenario, 'allClouds': 'opens immediately during load', 'defaultSidebar': 'interactive during load', 'scroll': 'not changed by cancelled scans', 'resume': 'folders load after return'}
     if scenario == 'cloud-order-scroll':
         driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelectorAll(".ycp-folder").length>=26&&!r.querySelector(".ycp-status");', timeout=25)
         points = driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;const source=r.querySelector("[data-cloud-id=cloud-alpha] .ycp-link").getBoundingClientRect();const list=r.querySelector(".ycp-mine").getBoundingClientRect();return {source:{x:Math.round(source.x+source.width/2),y:Math.round(source.y+source.height/2)},target:{x:Math.round(list.x+80),y:Math.round(list.bottom-5)}};')
@@ -237,6 +257,11 @@ def exercise(driver, origin, scenario):
             return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'fresh folders retained throughout repeated refresh'}
         if scenario == 'delayed-cancel':
             driver.wait('return fixture.expansionClicks===1;')
+            modern = driver.evaluate('return Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).some(b=>b.title==="Show all organization clouds in this panel"&&!b.disabled);')
+            assert modern
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show all organization clouds in this panel")')
+            driver.wait('return document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud").length===3;')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-header button")).find(b=>b.title==="Show my clouds")')
             driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Default sidebar")')
             driver.wait('return !!document.querySelector(".ycp-native-return-slot")?.shadowRoot?.querySelector("button");')
             driver.click('document.querySelector(".ycp-native-return-slot").shadowRoot.querySelector("button")')
@@ -327,7 +352,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'delayed-cache', 'multi-saved', 'empty-cache', 'expand-state', 'folder-icons', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

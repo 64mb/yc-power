@@ -31,6 +31,7 @@ org('org-alpha','Alpha organization');
 if(scenario==='virtual')for(let n=0;n<30;n++)cloud('cloud-'+n,'Cloud '+n);
 else{
  cloud('cloud-alpha','Alpha core');folder('folder-alpha','Alpha folder','cloud-alpha');
+ if(scenario==='delayed-controls')for(let n=0;n<30;n++)cloud('cloud-extra-'+n,'Extra cloud '+n);
  if(scenario==='cloud-order-scroll')for(let n=0;n<24;n++)folder('folder-extra-'+n,'Extra folder '+n,'cloud-alpha');
  cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
  if(scenario.startsWith('multi'))org('org-beta','Beta organization');
