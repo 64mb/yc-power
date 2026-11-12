@@ -11,11 +11,13 @@ YC Power brings your frequently used clouds and folders together in a compact si
 ## Make the console yours
 
 - Add or remove clouds from **My clouds**; refresh clouds and their folders together from the header
+- See selected clouds from multiple organizations together in collapsible groups; existing selections and customizations stay separate for each organization
 - Display the previous local catalog immediately while refreshing it in the background; retry a failed initial read once after one second
 - Open **All clouds** to use the original console tree and add clouds from it, or return to the default sidebar, including during loading
 - Background collection pauses while you use the original tree and resumes when you return to My clouds and close the full list
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
-- Choose one of 24 Gravity UI icons for each folder; clouds keep their original icon
+- Choose one of 24 Gravity UI icons for each folder; clouds keep their original icon when folders are enabled, and support icon presets in clouds-only mode
+- Set individual console addresses to clouds-only mode to hide folders and skip background folder loading
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
 - Drag clouds to reorder My clouds, or use Alt+Up/Down; the order is saved for each organization
 - Sort folders alphabetically by their displayed labels, keeping their order stable during refresh

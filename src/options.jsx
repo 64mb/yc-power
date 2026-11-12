@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
-import {Plus, TrashBin, FloppyDisk} from '@gravity-ui/icons';
+import {Plus, TrashBin, FloppyDisk, FolderTree, Clouds} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
 import {getLanguage, messages} from './options-i18n.js';
@@ -24,14 +24,21 @@ function normalizeHost(value) {
 }
 
 function Settings() {
-    const [hosts, setHosts] = useState(DEFAULT_HOSTS);
+    const [hosts, setHosts] = useState(DEFAULT_HOSTS.map((host) => ({host, cloudOnly: false})));
     const [compactDensity, setCompactDensity] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
     useEffect(() => {
-        browser.storage.local.get(['domainHosts', 'compactDensity']).then((stored) => {
-            setHosts(Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS);
+        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts']).then((stored) => {
+            const disabledHosts = new Set((Array.isArray(stored.cloudOnlyHosts) ? stored.cloudOnlyHosts : []).flatMap((host) => {
+                try { return [normalizeHost(host)]; } catch { return []; }
+            }));
+            setHosts((Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS).map((host) => {
+                let cloudOnly = false;
+                try { cloudOnly = disabledHosts.has(normalizeHost(host)); } catch { /* keep invalid addresses editable */ }
+                return {host, cloudOnly};
+            }));
             setCompactDensity(stored.compactDensity === true);
             setLoading(false);
         }).catch(() => {
@@ -41,7 +48,14 @@ function Settings() {
     async function save(event) {
         event.preventDefault();
         try {
-            const next = [...new Set(hosts.map((host) => host.trim()).filter(Boolean).map(normalizeHost))];
+            const rows = new Map();
+            for (const row of hosts) {
+                if (!row.host.trim()) continue;
+                const host = normalizeHost(row.host.trim());
+                if (!rows.has(host)) rows.set(host, {host, cloudOnly: row.cloudOnly});
+            }
+            const next = [...rows.keys()];
+            const cloudOnlyHosts = [...rows.values()].filter((row) => row.cloudOnly).map((row) => row.host);
             // request permissions directly from the save gesture
             const request = next.length ? browser.permissions.request({origins: next.map((host) => host + '/*')}) : Promise.resolve(true);
             setSaving(true);
@@ -51,12 +65,12 @@ function Settings() {
             }
             const stored = await browser.storage.local.get('domainHosts');
             const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
-            await browser.storage.local.set({domainHosts: next, compactDensity});
+            await browser.storage.local.set({domainHosts: next, compactDensity, cloudOnlyHosts});
             const removed = previous.flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }).filter((host) => !next.includes(host) && !DEFAULT_HOSTS.includes(host));
             if (removed.length) await browser.permissions.remove({origins: removed.map((host) => host + '/*')});
-            setHosts(next);
+            setHosts([...rows.values()]);
             setStatus({theme: 'success', message: next.length ? t.saved : t.disabled});
         } catch (error) {
             setStatus({theme: 'danger', message: error instanceof HostError ? error.message : t.saveFailed});
@@ -72,16 +86,22 @@ function Settings() {
             <Text as="p" color="secondary">{t.intro}</Text>
             <form onSubmit={save}>
                 <div className="domain-list">
-                    {hosts.map((host, index) => <div className="domain-row" key={index}>
-                        <TextInput size="l" value={host} disabled={loading || saving} placeholder={t.placeholder}
+                    {hosts.map((row, index) => <div className="domain-row" key={index}>
+                        <TextInput size="l" value={row.host} disabled={loading || saving} placeholder={t.placeholder}
                             controlProps={{'aria-label': `${t.address} ${index + 1}`, spellCheck: false, autoComplete: 'off'}}
-                            onUpdate={(value) => setHosts((current) => current.map((item, i) => i === index ? value : item))}/>
+                            onUpdate={(value) => setHosts((current) => current.map((item, i) => i === index ? {...item, host: value} : item))}/>
+                        <Button size="l" view={row.cloudOnly ? 'outlined-info' : 'flat-secondary'} className="domain-folder-toggle"
+                            disabled={loading || saving} title={row.cloudOnly ? t.cloudsOnly : t.foldersEnabled}
+                            aria-label={`${row.cloudOnly ? t.cloudsOnly : t.foldersEnabled} ${index + 1}`} selected={row.cloudOnly}
+                            onClick={() => setHosts((current) => current.map((item, i) => i === index ? {...item, cloudOnly: !item.cloudOnly} : item))}>
+                            <Icon data={row.cloudOnly ? Clouds : FolderTree} size={16}/>
+                        </Button>
                         <Button size="l" view="flat-secondary" disabled={loading || saving} title={t.remove} aria-label={`${t.remove} ${index + 1}`}
                             onClick={() => setHosts((current) => current.filter((_, i) => i !== index))}><Icon data={TrashBin} size={16}/></Button>
                     </div>)}
                 </div>
                 {!hosts.length && <Text as="p" color="secondary">{t.empty}</Text>}
-                <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, ''])}><Icon data={Plus} size={16}/>{t.add}</Button>
+                <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, {host: '', cloudOnly: false}])}><Icon data={Plus} size={16}/>{t.add}</Button>
                 <Text className="settings-hint" as="p" variant="caption-1" color="secondary">{t.hint}</Text>
                 <section className="settings-appearance" aria-labelledby="appearance-heading">
                     <Text as="h2" variant="subheader-2" id="appearance-heading">{t.appearance}</Text>

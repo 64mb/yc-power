@@ -39,6 +39,7 @@ else{
  cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
  if(scenario.startsWith('multi'))org('org-beta','Beta organization');
  cloud('cloud-beta','Beta core');folder('folder-beta','Beta folder','cloud-beta');
+ if(scenario==='multi-grouped'){org('org-empty','Empty organization');cloud('cloud-empty','Unselected cloud')}
 }
 const list=document.querySelector('.cloud-tree-list'),ul=document.getElementById('fixture-rows');ul.style.height=records.length*36+'px';
 function renderRows(){
@@ -50,7 +51,8 @@ function renderRows(){
   const li=document.createElement('li');li.className='native-row'+(row.type==='organization'?' native-org':'');li.style.transform='translateY('+(index*36)+'px)';
   const item=document.createElement('div');item.className='native-item cloud-tree-list-item__item cloud-tree-list-item__item_opened'+(row.type==='folder'?' native-folder':'');item.dataset.listItem=row.type+'.'+row.id;item.tabIndex=0;
   const a=document.createElement('a');a.className='cloud-tree-list-item__title';a.title=row.name;a.textContent=row.name;a.href=row.type==='organization'?'https://example.com/organizations/'+row.id:row.type==='cloud'?'/clouds/'+row.id:'/clouds/'+row.cloudId+'/'+row.id;
-  if(scenario.startsWith('delayed')&&row.type==='cloud'){
+  if(scenario==='multi-regional'&&row.type==='cloud'&&row.id==='cloud-beta')a.href='/auth/move?targetRegionId=region-beta&targetService=console&targetPath=%2Fcloud%2Fcloud-beta';
+  if((scenario.startsWith('delayed')||scenario==='multi-regional'&&row.id==='cloud-beta')&&row.type==='cloud'){
    const button=document.createElement('button');button.type='button';button.className='cloud-tree-list-item__expand-button';button.setAttribute('aria-expanded',String(opened.has(row.id)));
    const icon=document.createElement('span');icon.className='cloud-tree-list-item__expand-icon'+(opened.has(row.id)?' cloud-tree-list-item__expand-icon_expanded':'');icon.textContent='›';button.append(icon);
    button.onclick=()=>{expansionClicks++;if(opened.has(row.id)){opened.delete(row.id);renderRows();return}opened.add(row.id);item.setAttribute('aria-busy','true');setTimeout(()=>{loaded.add(row.id);renderRows()},750)};
@@ -64,6 +66,22 @@ const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');cons
 if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
+if(!saved&&['delayed-clouds-only','delayed-cloud-icons'].includes(scenario)){
+ memory.cloudOnlyHosts=[location.origin];
+ memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-alpha',name:'Alpha folder',href:'/clouds/cloud-alpha/folder-alpha',cloudId:'cloud-alpha'}]}];
+}
+if(!saved&&scenario==='multi-regional'){
+ const prefix='yc-power:'+location.origin;
+ memory[prefix+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,expandedClouds:['cloud-alpha'],custom:{}};
+ memory[prefix+':organization:id:org-beta']={mine:['cloud-beta'],initialized:true,width:320,expandedClouds:['cloud-beta'],custom:{}};
+ memory[prefix+':layout']={scopeKey:prefix+':organization:id:org-alpha',width:320,collapsedOrganizations:[]};
+}
+if(!saved&&scenario==='multi-grouped'){
+ const prefix='yc-power:'+location.origin;
+ memory[prefix+':organization:id:org-alpha']={mine:['cloud-alpha','cloud-analytics'],initialized:true,width:320,expandedClouds:['cloud-alpha','cloud-analytics'],custom:{'cloud:cloud-alpha':{label:'Alpha selected',color:'#112233'},'folder:folder-alpha':{label:'Alpha custom folder',color:'#223344',icon:'terminal'}}};
+ memory[prefix+':organization:id:org-beta']={mine:['cloud-beta'],initialized:true,width:320,expandedClouds:['cloud-beta'],custom:{'cloud:cloud-beta':{label:'Beta selected',color:'#445566'},'folder:folder-beta':{label:'Beta custom folder',color:'#556677',icon:'database'}}};
+ memory[prefix+':layout']={scopeKey:prefix+':organization:id:org-alpha',width:320,collapsedOrganizations:[]};
+}
 if(!saved&&scenario==='multi-saved'){const k='yc-power:'+location.origin+':organization:id:org-beta';memory[k]={mine:['cloud-beta'],initialized:true,width:320,custom:{}};delete memory['yc-power:'+location.origin+':organization:id:org-alpha'];memory['yc-power:'+location.origin+':layout']={scopeKey:k,width:320}}
 if(!saved&&(scenario==='delayed-cache'||scenario==='empty-cache'||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-old',name:'Cached folder',href:'/clouds/cloud-alpha/folder-old',cloudId:'cloud-alpha'}]}];
 if(!saved&&scenario==='expand-state')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine.push('cloud-beta');

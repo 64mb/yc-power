@@ -13,8 +13,8 @@
   "version": {
     "license": "all-rights-reserved",
     "release_notes": {
-      "en-US": "Hide the first tree-read failure while retrying silently. Show an error only after the second attempt fails.",
-      "ru": "Первая ошибка чтения дерева скрыта. Сообщение появляется только после неудачной повторной попытки."
+      "en-US": "Group selected clouds from all organizations, preserving existing preferences. Add per-address clouds-only mode, cloud icon presets, active-cloud highlighting, regional console links, persistent organization disclosure, and click-to-close customization.",
+      "ru": "Группировка выбранных облаков всех организаций с сохранением настроек. Режим \"Только облака\" для отдельных адресов, иконки облаков, выделение текущего облака, региональные ссылки, сохранение состояния организаций и закрытие настройки повторным нажатием."
     },
     "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
   }
