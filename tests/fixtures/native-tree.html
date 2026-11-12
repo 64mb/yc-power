@@ -78,7 +78,7 @@ if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
 if(scenario==='becomes-empty')fixture.removeAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='folder-alpha');records.splice(index,1);ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='becomes-empty')fixture.addAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='cloud-alpha');records.splice(index+1,0,{type:'folder',id:'folder-alpha',name:'Alpha folder',cloudId:'cloud-alpha'});ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='folder-order')fixture.reverseAlpha=()=>{const first=records.findIndex(r=>r.id==='cloud-alpha')+1;let end=first;while(end<records.length&&records[end].type==='folder')end++;records.splice(first,end-first,...records.slice(first,end).reverse());renderRows()};
-if(scenario.startsWith('retry')){fixture.retryStartedAt=performance.now();if(scenario==='retry-empty'){ul.replaceChildren();setTimeout(renderRows,1500)}else{list.classList.remove('cloud-tree-list');if(scenario!=='retry-permanent')setTimeout(()=>list.classList.add('cloud-tree-list'),1500)}}
+if(scenario.startsWith('retry')){fixture.retryStartedAt=performance.now();if(scenario==='retry-empty'){ul.replaceChildren();setTimeout(renderRows,750)}else{list.classList.remove('cloud-tree-list');if(scenario!=='retry-permanent')setTimeout(()=>list.classList.add('cloud-tree-list'),750)}}
 if(scenario==='empty-cache'){ul.replaceChildren();ul.style.height='0';const empty=document.createElement('div');empty.className='g-placeholder-container';empty.textContent='No clouds';ul.append(empty);list.removeEventListener('scroll',renderRows)}
 if(scenario==='small')document.querySelector('.cloud-tree-list-container').style.backgroundColor='rgb(243, 245, 247)';
 </script>
