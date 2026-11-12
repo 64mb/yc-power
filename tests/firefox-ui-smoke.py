@@ -150,7 +150,14 @@ def exercise(driver, origin, scenario):
             driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
             driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"));', timeout=25)
             assert driver.evaluate('return fixture.expansionClicks;') == 1
-            return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'replaced with fresh folders'}
+            driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
+            driver.evaluate('window.fixture.folderDisappeared=false;const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{if(!r.querySelector(".ycp-folder"))fixture.folderDisappeared=true}).observe(r,{childList:true,subtree:true});return true;')
+            driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Refresh clouds")')
+            driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");')
+            driver.wait('return !document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status");', timeout=25)
+            assert not driver.evaluate('return fixture.folderDisappeared;')
+            assert driver.evaluate('return fixture.expansionClicks;') == 1
+            return {'scenario': scenario, 'cache': 'rendered first', 'backgroundRefresh': 'fresh folders retained throughout repeated refresh'}
         if scenario == 'delayed-cancel':
             driver.wait('return fixture.expansionClicks===1;')
             driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll("button")).find(b=>b.title==="Default sidebar")')
