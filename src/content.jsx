@@ -185,7 +185,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         if (stopped || tree !== retryTree || key !== retryKey || !tree?.isConnected) return;
         startupRetryQueued = true;
         scheduleScans();
-      }, 2000);
+      }, 1000);
       return;
     }
     if (!target) cancelStartupRetry();

@@ -157,23 +157,23 @@ def exercise(driver, origin, scenario):
         driver.evaluate('fixture.retrySeenAt=performance.now();const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{if(!fixture.retryLoadingAt&&r.querySelector(".ycp-status")?.textContent.includes("Loading cloud list"))fixture.retryLoadingAt=performance.now()}).observe(r,{childList:true,subtree:true,characterData:true});return true;')
         assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
         if scenario == 'retry-permanent':
-            driver.wait('const s=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent;return s?.includes("Could not read")&&!s.includes("2 seconds");')
-            assert driver.evaluate('return performance.now()-fixture.retryStartedAt;') >= 1900
+            driver.wait('const s=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent;return s?.includes("Could not read")&&!s.includes("1 second");')
+            assert driver.evaluate('return performance.now()-fixture.retryStartedAt;') >= 900
             driver.evaluate('fixture.finalErrorAt=performance.now();return true;')
             driver.wait('return performance.now()-fixture.finalErrorAt>2200;')
-            assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("2 seconds");')
-            return {'scenario': scenario, 'retry': 'once after 2 seconds', 'cache': 'retained after permanent failure'}
+            assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("1 second");')
+            return {'scenario': scenario, 'retry': 'once after 1 second', 'cache': 'retained after permanent failure'}
         if scenario == 'retry-defers':
             driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
             expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list-container > div:last-child");list.scrollTop=250;return list.scrollTop;')
-            driver.wait('return performance.now()-fixture.retrySeenAt>2200;')
+            driver.wait('return performance.now()-fixture.retrySeenAt>1200;')
             assert not driver.evaluate('return !!fixture.retryLoadingAt;')
             assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
             driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
         driver.wait('return !!fixture.retryLoadingAt;', timeout=15)
-        assert driver.evaluate('return fixture.retryLoadingAt-fixture.retryStartedAt;') >= 1800
+        assert driver.evaluate('return fixture.retryLoadingAt-fixture.retryStartedAt;') >= 900
         driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"));', timeout=25)
-        return {'scenario': scenario, 'retry': 'after 2 seconds', 'cache': 'visible until recovery', 'foreground': 'respected'}
+        return {'scenario': scenario, 'retry': 'after 1 second', 'cache': 'visible until recovery', 'foreground': 'respected'}
     if scenario == 'delayed-controls':
         driver.wait('return fixture.expansionClicks===1;', timeout=25)
         driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
