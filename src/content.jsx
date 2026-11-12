@@ -178,7 +178,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     if (!target && startupScan && !startupRetryUsed) {
       startupRetryUsed = true;
       rescan = false;
-      statusKey = 'retrying';
+      statusKey = 'cloudCount';
       const retryTree = tree, retryKey = key;
       startupRetryTimer = setTimeout(() => {
         startupRetryTimer = null;

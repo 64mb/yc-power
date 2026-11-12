@@ -1,0 +1,21 @@
+{
+  "summary": {
+    "en-US": "Organize your clouds and folders in Yandex Cloud Console.",
+    "ru": "Удобная навигация по облакам и каталогам в консоли Yandex Cloud."
+  },
+  "categories": [
+    "web-development"
+  ],
+  "description": {
+    "en-US": "Keep selected clouds in My Clouds and collapse the full list. Customize names, colors, and folder icons, reorder clouds, and use compact rows. Preferences stay in your browser and are separated by console address and organization. Supports Russian and English and follows the console theme.\n\nIndependent extension, not affiliated with Yandex Cloud. Does not manage cloud resources or send settings to a server.",
+    "ru": "Выберите нужные облака для списка \"Мои облака\", а общий список сверните. Настраивайте названия, цвета и иконки каталогов, меняйте порядок облаков и включайте компактный режим. Настройки хранятся в браузере отдельно для каждого адреса консоли и организации. Поддерживаются русский и английский языки и тема консоли.\n\nНезависимое расширение, не связанное с Yandex Cloud. Не управляет облачными ресурсами и не отправляет настройки на сервер."
+  },
+  "version": {
+    "license": "all-rights-reserved",
+    "release_notes": {
+      "en-US": "Hide the first tree-read failure while retrying silently. Show an error only after the second attempt fails.",
+      "ru": "Первая ошибка чтения дерева скрыта. Сообщение появляется только после неудачной повторной попытки."
+    },
+    "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
+  }
+}

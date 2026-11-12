@@ -13,11 +13,10 @@ const messages = {
     empty: 'Use the plus button in the full cloud list to add your clouds.', noFolders: 'No folders', refreshFolders: 'Refresh folders',
     label: 'Label', color: 'Color', hex: 'Color in HEX', palette: 'Color palette', save: 'Save', auto: 'Auto', cancel: 'Cancel',
     width: 'Sidebar width', reading: 'Reading the console tree…', saveFailed: 'Could not save settings',
-    retrying: 'Could not read the tree. Retrying in 2 seconds…',
     scanPaused: 'Close the full list to resume refresh',
     clearSearch: 'Clear the search in the original list, then refresh', loadingFolders: 'Loading folders…',
     scanning: 'Loading cloud list…', cloudCount: '{count} clouds', notFound: 'Cloud not found. Check the original list',
-    scanFailed: 'Could not read the tree. The original list is available',
+    scanFailed: 'Could not read the tree',
   },
   ru: {
     dragCloud: 'Перетащите для изменения порядка', reorderCloud: 'Порядок облака {name}. Используйте Alt+стрелка вверх или Alt+стрелка вниз', cloudMoved: '{name}: позиция {position} из {count}',
@@ -31,11 +30,10 @@ const messages = {
     empty: 'Добавьте нужные облака кнопкой плюса в общем списке облаков', noFolders: 'Нет каталогов', refreshFolders: 'Обновить каталоги',
     label: 'Подпись', color: 'Цвет', hex: 'Цвет в HEX', palette: 'Палитра цвета', save: 'Сохранить', auto: 'Авто', cancel: 'Отмена',
     width: 'Ширина панели', reading: 'Читаю дерево консоли…', saveFailed: 'Не удалось сохранить настройки',
-    retrying: 'Не удалось прочитать дерево. Повторю через 2 секунды…',
     scanPaused: 'Закройте общий список для продолжения обновления',
     clearSearch: 'Очистите поиск в штатном списке и нажмите обновить', loadingFolders: 'Загружаю каталоги…',
     scanning: 'Собираю список облаков…', cloudCount: 'Облака: {count}', notFound: 'Облако не найдено. Проверьте штатный список',
-    scanFailed: 'Не удалось прочитать дерево облаков',
+    scanFailed: 'Не удалось прочитать дерево',
   },
 };
 function language(documentLanguage, placeholder = '', browserLanguage = 'en') {
