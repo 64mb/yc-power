@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Alert, Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
+import {Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
 import {Plus, TrashBin, FloppyDisk} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
@@ -82,17 +82,16 @@ function Settings() {
                 </div>
                 {!hosts.length && <Text as="p" color="secondary">{t.empty}</Text>}
                 <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, ''])}><Icon data={Plus} size={16}/>{t.add}</Button>
-                <Text className="settings-hint" as="p" variant="body-1" color="secondary">{t.hint}</Text>
+                <Text className="settings-hint" as="p" variant="caption-1" color="secondary">{t.hint}</Text>
                 <section className="settings-appearance" aria-labelledby="appearance-heading">
                     <Text as="h2" variant="subheader-2" id="appearance-heading">{t.appearance}</Text>
                     <Switch size="l" checked={compactDensity} onUpdate={setCompactDensity} disabled={loading || saving}
                         controlProps={{'aria-describedby': 'compact-density-hint'}}>{t.compactDensity}</Switch>
-                    <Text as="p" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
+                    <Text as="p" variant="caption-1" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
                 </section>
-                <div className="settings-actions"><Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
+                <div className="settings-actions">{status && <Text className="settings-status" variant="caption-1" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>
-        {status && <div role="status" aria-live="polite"><Alert theme={status.theme} message={status.message}/></div>}
         <Text as="p" variant="caption-2" color="secondary">{t.privacy}</Text>
     </main>;
 }

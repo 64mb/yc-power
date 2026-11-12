@@ -138,10 +138,14 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     const visible = movableClouds();
     return orderingAvailable() && cloudDrag?.key === key && cloudDrag.id !== target && visible.some(c => c.id === cloudDrag.id) && visible.some(c => c.id === target);
   }
+  function hasNoFolders(id) {
+    const cloud = state.clouds.find(cloud => cloud.id === id);
+    return Boolean(cloud && !cloud.folders.length && loadedFolders.has(folderKey(id)));
+  }
   function restoreExpanded() {
     expanded.clear();
     const saved = Array.isArray(state.expandedClouds) ? state.expandedClouds : state.mine;
-    saved.forEach(id => { if (typeof id === 'string') expanded.add(id); });
+    saved.forEach(id => { if (typeof id === 'string' && !hasNoFolders(id)) expanded.add(id); });
   }
   function rememberExpanded() { state.expandedClouds = [...expanded]; }
   function revealCurrentRoute() {
@@ -153,6 +157,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     const cloud = scopedClouds().find(cloud => active.type === 'cloud' ? cloud.id === active.id : cloud.id === active.cloudId || cloud.folders.some(folder => folder.id === active.id));
     if (!cloud) return;
     revealedRoute = transition;
+    if (hasNoFolders(cloud.id)) return;
     if (!expanded.has(cloud.id)) { expanded.add(cloud.id); rememberExpanded(); save(); }
   }
   const catalogKey = `yc-power:${location.origin}:catalog`;
@@ -164,8 +169,32 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
   }
   const loadedFolders = new Set(), attemptedFolders = new Set(), pendingFolders = new Map();
   let scanGeneration = 0, queueScheduled = false, activeScan = null;
+  let startupScan = false, startupRetryUsed = false, startupRetryTimer = null, startupRetryQueued = false;
+  function cancelStartupRetry() {
+    clearTimeout(startupRetryTimer);
+    startupRetryTimer = null; startupRetryQueued = false; startupScan = false;
+  }
+  function scanFailed(target) {
+    if (!target && startupScan && !startupRetryUsed) {
+      startupRetryUsed = true;
+      rescan = false;
+      statusKey = 'retrying';
+      const retryTree = tree, retryKey = key;
+      startupRetryTimer = setTimeout(() => {
+        startupRetryTimer = null;
+        if (stopped || tree !== retryTree || key !== retryKey || !tree?.isConnected) return;
+        startupRetryQueued = true;
+        scheduleScans();
+      }, 2000);
+      return;
+    }
+    if (!target) cancelStartupRetry();
+    statusKey = 'scanFailed';
+    if (!state.mine.length) allOpen = true;
+  }
   const folderKey = id => `${key}:${id}`;
   function invalidateScans() {
+    cancelStartupRetry();
     clearCloudDrag();
     scanGeneration++; pendingFolders.clear(); loadedFolders.clear(); attemptedFolders.clear();
     if (busy) rescan = true;
@@ -181,7 +210,11 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     queueScheduled = true;
     queueMicrotask(() => {
       queueScheduled = false;
-      if (busy || stopped || native || allOpen || !tree?.isConnected) return;
+      if (busy || stopped || native || allOpen || startupRetryTimer !== null || !tree?.isConnected) return;
+      if (startupRetryQueued) {
+        startupRetryQueued = false; rescan = false;
+        void scan(); return;
+      }
       if (rescan) { rescan = false; void scan(); return; }
       for (const [requestKey, request] of pendingFolders) {
         pendingFolders.delete(requestKey);
@@ -238,7 +271,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     if (state.initialized) return;
     const active = Core.route(location.href, location.origin);
     const current = scopedClouds().find(c => active && (active.type === 'cloud' ? active.id === c.id : active.cloudId === c.id || c.folders.some(f => f.id === active.id)));
-    if (current) { state.mine = [current.id]; state.initialized = true; expanded.add(current.id); rememberExpanded(); save(); }
+    if (current) { state.mine = [current.id]; state.initialized = true; if (!hasNoFolders(current.id)) expanded.add(current.id); rememberExpanded(); save(); }
   }
   function display(item, parent) {
     return state.custom[`${item.type}:${item.id}`]?.label || Core.label(item.name, parent?.name);
@@ -377,7 +410,15 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     }
     throw new Error('Virtual rows did not catch up with scrolling');
   }
+  function refreshClouds() {
+    cancelStartupRetry();
+    void scan();
+  }
   async function scan(target) {
+    if (startupRetryTimer !== null || startupRetryQueued) {
+      if (target) queueFolderScan(target, true);
+      return;
+    }
     if (busy) {
       if (target) queueFolderScan(target, true); else rescan = true;
       return;
@@ -387,7 +428,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     const scanTree = tree, generation = scanGeneration, scanKey = key;
     const valid = () => !stopped && tree === scanTree && tree.isConnected && !native && !allOpen && generation === scanGeneration && scanKey === key;
     const list = tree.querySelector('.cloud-tree-list');
-    if (!list) { if (!state.mine.length) allOpen = true; statusKey = 'scanFailed'; setNativeVisibility(); render(); return; }
+    if (!list) { scanFailed(target); setNativeVisibility(); render(); return; }
     if (tree.querySelector('input')?.value) {
       statusKey = 'clearSearch'; allOpen = true; setNativeVisibility(); render(); return;
     }
@@ -442,12 +483,15 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       if (!valid()) return;
       const freshRows = [...rows.values()];
       const confirmedEmpty = !target && !tree.querySelector('[role="progressbar"], .g-spin, [aria-busy="true"], [role="alert"]') && /no clouds|нет облаков|облака не найдены|не найдено облаков|no results|ничего не найдено/i.test(list.textContent);
+      if (!target && !freshRows.some(row => row.type === 'cloud') && !confirmedEmpty) throw new Error('Cloud list is not ready');
       if (freshRows.some(row => row.type === 'cloud')) state.clouds = Core.catalog(freshRows, state.clouds, found ? target : undefined);
       else if (confirmedEmpty) state.clouds = [];
+      if (!target) cancelStartupRetry();
       saveCatalog();
       if (target && found) loadedFolders.add(folderKey(target));
       scanReady = true;
       syncOrganization(); initializeMine();
+      if (target && found && hasNoFolders(target) && expanded.delete(target)) { rememberExpanded(); save(); }
       statusKey = 'cloudCount'; statusArgs = {count: scopedClouds().length};
       if (target && !found) statusKey = 'notFound';
       if (!target) {
@@ -458,7 +502,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     } catch (error) {
       if (!valid()) return;
       console.warn('YC Power: tree scan failed', error);
-      statusKey = 'scanFailed'; if (!state.mine.length) allOpen = true;
+      scanFailed(target);
     } finally {
       if (target && !valid()) attemptedFolders.delete(`${scanKey}:${target}`);
       if (!scanContext.restored && list.isConnected) list.scrollTop = originalScroll;
@@ -484,7 +528,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     const mine = state.mine.includes(cloud.id);
     state.mine = mine ? state.mine.filter(id => id !== cloud.id) : [...state.mine, cloud.id];
     state.initialized = true;
-    if (!mine) expanded.add(cloud.id);
+    if (!mine && !hasNoFolders(cloud.id)) expanded.add(cloud.id);
     rememberExpanded();
     save(); render(); decorateNative();
     if (!mine && !cloud.folders.length) queueFolderScan(cloud.id);
@@ -504,6 +548,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     return route?.id === item.id && route.type === item.type ? route.href : undefined;
   }
   function Item({item, parent, draggable = false}) {
+    const empty = item.type === 'cloud' && hasNoFolders(item.id);
     const current = item.type === 'folder' && location.pathname.split('/').includes(item.id);
     return <div className={`ycp-row ycp-${item.type}`} data-current={current || undefined} draggable={false} data-reorderable={draggable || undefined} tabIndex={draggable ? 0 : undefined} role={draggable ? 'group' : undefined} aria-label={draggable ? t('reorderCloud', {name: display(item)}) : undefined} aria-keyshortcuts={draggable ? 'Alt+ArrowUp Alt+ArrowDown' : undefined} onKeyDown={event => {
       if (!draggable || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
@@ -513,12 +558,12 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       const next = clouds[index + (event.key === 'ArrowUp' ? -1 : 1)];
       if (next) moveCloud(item.id, next.id, event.key === 'ArrowDown', true);
     }} onPointerDown={event => { if (draggable) beginCloudDrag(event, item); }} onDragStart={draggable ? event => event.preventDefault() : undefined}>
-      {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={expanded.has(item.id)} onClick={event => {
+      {item.type === 'cloud' && <Button view="flat-secondary" size="m" aria-label={t('folders', {name: item.name})} aria-expanded={!empty && expanded.has(item.id)} disabled={empty} onClick={event => {
         if (expanded.has(item.id)) expanded.delete(item.id);
         else { expanded.add(item.id); if (!item.folders.length) queueFolderScan(item.id); }
         if (event.detail > 0) event.currentTarget.blur();
         rememberExpanded(); save(); render();
-      }}><Icon data={expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
+      }}><Icon data={!empty && expanded.has(item.id) ? ChevronDown : ChevronRight} size={16}/></Button>}
       {item.type === 'folder' && <span className="ycp-indent"/>}
       <span className="ycp-item-icon" title={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item)}}><Icon data={item.type === 'cloud' ? Cloud : folderIcons[folderIconName(item.id)]} size={16}/></span>
       <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} title={`${item.name}\n${item.id}`} aria-current={current ? 'page' : undefined}>
@@ -563,6 +608,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     const currentClouds = scopedClouds();
     const allModern = state.showAllModern && organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10;
     const mine = allModern ? currentClouds : movableClouds();
+    const folderNames = new Intl.Collator(consoleLanguage(), {sensitivity: 'base', numeric: true});
     return <ThemeProvider theme={theme} scoped lang={consoleLanguage()} rootClassName="ycp-root"><div className="ycp-layout" style={themeOverrides} data-all-open={allOpen || undefined} data-edit-open={Boolean(edit) || undefined} data-compact={compactDensity || undefined}>
       {native ? (() => {
         const button = <ThemeProvider theme={theme} scoped lang={consoleLanguage()}><span style={themeOverrides}><Button view="flat-secondary" size="m" title={t('back')} aria-label={t('back')} onClick={() => { native = false; setNativeVisibility(); render(); }}><Icon data={ArrowLeft} size={16}/></Button></span></ThemeProvider>;
@@ -570,7 +616,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
       })() : <>
         <div className="ycp-header"><div className="ycp-heading"><Text variant="subheader-1">{t(allModern ? 'all' : 'mine')}</Text>{organization && <Text className="ycp-organization" variant="caption-2" color="secondary" title={organization.name}>{organization.name}</Text>}</div>
           {organization && scanReady && currentClouds.length > 0 && currentClouds.length < 10 && <Button view="flat-secondary" size="m" selected={Boolean(allModern)} aria-pressed={Boolean(allModern)} title={t(allModern ? 'showMyClouds' : 'showAllModern')} aria-label={t(allModern ? 'showMyClouds' : 'showAllModern')} onClick={() => { clearCloudDrag(); state.showAllModern = !allModern; save(); render(); }}><Icon data={allModern ? Clouds : Cloud} size={16}/></Button>}
-          <Button view="flat-secondary" size="m" title={t('refresh')} aria-label={t('refresh')} loading={busy} onClick={() => void scan()}><Icon data={ArrowRotateRight} size={16}/></Button>
+          <Button view="flat-secondary" size="m" title={t('refresh')} aria-label={t('refresh')} loading={busy} onClick={refreshClouds}><Icon data={ArrowRotateRight} size={16}/></Button>
           <Button view="flat-secondary" size="m" title={t('native')} aria-label={t('native')} onClick={() => { clearCloudDrag(); pauseTreeScan(); native = true; setNativeVisibility(); render(); }}><Icon data={Bars} size={16}/></Button>
         </div>
 
@@ -580,12 +626,11 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         <div className="ycp-mine">
           {!mine.length && <div className="ycp-note">{t('empty')}</div>}
           {mine.map(cloud => {
-            const folders = cloud.folders;
+            const folders = [...cloud.folders].sort((a, b) => folderNames.compare(display(a, cloud), display(b, cloud)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
             return <section className="ycp-group" key={cloud.id} data-cloud-id={cloud.id}>
               <Item item={cloud} draggable={!allModern}/>
-              {expanded.has(cloud.id) && <>
+              {expanded.has(cloud.id) && !hasNoFolders(cloud.id) && <>
                 {folders.map(folder => <Item key={folder.id} item={folder} parent={cloud}/>)}
-                {!cloud.folders.length && loadedFolders.has(folderKey(cloud.id)) && <div className="ycp-note">{t('noFolders')}</div>}
               </>}
             </section>;
           })}
@@ -593,7 +638,6 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
         {edit && <form className="ycp-edit" onSubmit={event => { event.preventDefault(); if (!/^#[0-9a-f]{6}$/i.test(edit.color)) return; state.custom[edit.key] = {label: edit.label.trim(), color: edit.color, ...(edit.type === 'folder' && Object.hasOwn(folderIcons, edit.icon) ? {icon: edit.icon} : {})}; edit = null; save(); render(); }}>
           <Text variant="caption-2">{edit.name}</Text>
           <TextInput value={edit.label} maxLength={120} controlProps={{'aria-label': t('label')}} onUpdate={value => { edit.label = value; render(); }}/>
-          <Text variant="caption-2">{t('color')}</Text>
           {Object.entries(Core.palettes).map(([name, colors]) => <div className="ycp-palette-group" key={name}>
             <div className="ycp-palette-heading"><Label theme={name === 'power' ? 'utility' : 'info'} size="xs">{t(name)}</Label></div>
             <Palette className="ycp-palette" rowClassName="ycp-palette-row" optionClassName="ycp-palette-option" multiple={false} size="m" columns={8} value={[edit.color]} aria-label={`${t('palette')}: ${t(name)}`} options={colors.map(color => ({value: color, title: color, content: <span className="ycp-swatch" style={{backgroundColor: color}}/>}))} onUpdate={values => { if (values[0]) { edit.color = values[0]; render(); } }}/>
@@ -669,6 +713,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     observer?.disconnect(); root?.unmount(); host?.remove();
     restoreNativeTree(); aside?.removeAttribute('data-ycp-aside'); aside?.style.removeProperty('--ycp-width');
     invalidateScans(); scanReady = false;
+    startupScan = true; startupRetryUsed = false;
     tree = nextTree; aside = tree.parentElement;
     aside.dataset.ycpAside = ''; applyWidth();
     host = document.createElement('div'); host.dataset.ycpHost = '';
@@ -686,6 +731,7 @@ const folderIcons = {folder: Folder, terminal: Terminal, server: Server, databas
     if (busy) rescan = true; else void scan();
   }
   function cleanup() {
+    cancelStartupRetry();
     clearCloudDrag();
     preferenceSync.flush(key).catch(() => {});
     stopped = true; clearInterval(timer); clearTimeout(saveTimer); observer?.disconnect(); themeObserver?.disconnect(); window.removeEventListener('resize', onResize);

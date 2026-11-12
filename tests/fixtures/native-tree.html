@@ -30,8 +30,11 @@ const folder=(id,name,cloudId)=>records.push({type:'folder',id,name,cloudId});
 org('org-alpha','Alpha organization');
 if(scenario==='virtual')for(let n=0;n<30;n++)cloud('cloud-'+n,'Cloud '+n);
 else{
- cloud('cloud-alpha','Alpha core');folder('folder-alpha','Alpha folder','cloud-alpha');
- if(scenario==='delayed-controls')for(let n=0;n<30;n++)cloud('cloud-extra-'+n,'Extra cloud '+n);
+ cloud('cloud-alpha','Alpha core');if(scenario!=='empty-cloud')folder('folder-alpha','Alpha folder','cloud-alpha');
+ if(scenario==='folder-order'){
+  folder('folder-deploy','ZZ deployment','cloud-alpha');folder('folder-api-10','AA original','cloud-alpha');folder('folder-api-2','BB original','cloud-alpha');folder('folder-dup-b','Other B','cloud-alpha');folder('folder-dup-a','Other A','cloud-alpha');folder('folder-fallback','Alpha beta-folder','cloud-alpha');
+ }
+ if((scenario==='delayed-controls'||scenario==='retry-defers'))for(let n=0;n<30;n++)cloud('cloud-extra-'+n,'Extra cloud '+n);
  if(scenario==='cloud-order-scroll')for(let n=0;n<24;n++)folder('folder-extra-'+n,'Extra folder '+n,'cloud-alpha');
  cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
  if(scenario.startsWith('multi'))org('org-beta','Beta organization');
@@ -58,18 +61,24 @@ function renderRows(){
 }
 list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
 const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');const memory=saved||{};const listeners=[];
-if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
+if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
 if(!saved&&scenario==='multi-saved'){const k='yc-power:'+location.origin+':organization:id:org-beta';memory[k]={mine:['cloud-beta'],initialized:true,width:320,custom:{}};delete memory['yc-power:'+location.origin+':organization:id:org-alpha'];memory['yc-power:'+location.origin+':layout']={scopeKey:k,width:320}}
-if(!saved&&(scenario==='delayed-cache'||scenario==='empty-cache'))memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-old',name:'Cached folder',href:'/clouds/cloud-alpha/folder-old',cloudId:'cloud-alpha'}]}];
+if(!saved&&(scenario==='delayed-cache'||scenario==='empty-cache'||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-old',name:'Cached folder',href:'/clouds/cloud-alpha/folder-old',cloudId:'cloud-alpha'}]}];
 if(!saved&&scenario==='expand-state')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine.push('cloud-beta');
 if(!saved&&scenario==='cloud-order')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-analytics','cloud-beta'];
 if(!saved&&scenario==='cloud-order-scroll')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-beta'];
+if(!saved&&scenario==='folder-order')memory['yc-power:'+location.origin+':organization:id:org-alpha'].custom=Object.fromEntries(Object.entries({'folder-alpha':'Zulu','folder-deploy':'alpha','folder-api-10':'API 10','folder-api-2':'api 2','folder-dup-a':'same','folder-dup-b':'Same'}).map(([id,label])=>['folder:'+id,{label}]));
+if(!saved&&['empty-cloud','becomes-empty'].includes(scenario))memory['yc-power:'+location.origin+':organization:id:org-alpha'].expandedClouds=['cloud-alpha'];
 const widths=[];
 new MutationObserver(()=>{const host=document.querySelector('[data-ycp-host]');if(host)widths.push(host.parentElement.getBoundingClientRect().width)}).observe(document.querySelector('.console-dashboard-layout__aside'),{childList:true,subtree:true,attributes:true});
 window.fixture={scenario,records,memory,renderRows,widths,get expansionClicks(){return expansionClicks}};
 if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
+if(scenario==='becomes-empty')fixture.removeAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='folder-alpha');records.splice(index,1);ul.style.height=records.length*36+'px';renderRows()};
+if(scenario==='becomes-empty')fixture.addAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='cloud-alpha');records.splice(index+1,0,{type:'folder',id:'folder-alpha',name:'Alpha folder',cloudId:'cloud-alpha'});ul.style.height=records.length*36+'px';renderRows()};
+if(scenario==='folder-order')fixture.reverseAlpha=()=>{const first=records.findIndex(r=>r.id==='cloud-alpha')+1;let end=first;while(end<records.length&&records[end].type==='folder')end++;records.splice(first,end-first,...records.slice(first,end).reverse());renderRows()};
+if(scenario.startsWith('retry')){fixture.retryStartedAt=performance.now();if(scenario==='retry-empty'){ul.replaceChildren();setTimeout(renderRows,1500)}else{list.classList.remove('cloud-tree-list');if(scenario!=='retry-permanent')setTimeout(()=>list.classList.add('cloud-tree-list'),1500)}}
 if(scenario==='empty-cache'){ul.replaceChildren();ul.style.height='0';const empty=document.createElement('div');empty.className='g-placeholder-container';empty.textContent='No clouds';ul.append(empty);list.removeEventListener('scroll',renderRows)}
 if(scenario==='small')document.querySelector('.cloud-tree-list-container').style.backgroundColor='rgb(243, 245, 247)';
 </script>
