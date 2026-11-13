@@ -13,8 +13,8 @@
   "version": {
     "license": "all-rights-reserved",
     "release_notes": {
-      "en-US": "Group selected clouds from all organizations, preserving existing preferences. Add per-address clouds-only mode, cloud icon presets, active-cloud highlighting, regional console links, persistent organization disclosure, and click-to-close customization.",
-      "ru": "Группировка выбранных облаков всех организаций с сохранением настроек. Режим \"Только облака\" для отдельных адресов, иконки облаков, выделение текущего облака, региональные ссылки, сохранение состояния организаций и закрытие настройки повторным нажатием."
+      "en-US": "Group selected clouds by organization and preserve disclosure state. Add per-address clouds-only mode, cloud icon presets, reliable active-cloud highlighting, and regional console links. Replace native hints with Gravity UI tooltips without layout shifts. Remove stale panels after extension reload. Detect tree readiness immediately with DOM observation and bounded 50 ms polling.",
+      "ru": "Группировка выбранных облаков по организациям с сохранением раскрытия. Режим \"Только облака\" для отдельных адресов, иконки облаков, определение активного облака и региональные ссылки. Подсказки Gravity UI без смещения интерфейса, очистка старых панелей после перезагрузки расширения и быстрое обнаружение готовности дерева."
     },
     "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
   }
