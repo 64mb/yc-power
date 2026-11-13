@@ -41,9 +41,9 @@ else{
  cloud('cloud-beta','Beta core');folder('folder-beta','Beta folder','cloud-beta');
  if(scenario==='multi-grouped'){org('org-empty','Empty organization');cloud('cloud-empty','Unselected cloud')}
 }
-const list=document.querySelector('.cloud-tree-list'),ul=document.getElementById('fixture-rows');ul.style.height=records.length*36+'px';
+let list=document.querySelector('.cloud-tree-list'),ul=document.getElementById('fixture-rows');ul.style.height=records.length*36+'px';
 function renderRows(){
- if(scenario==='empty-cache'&&window.fixture)return;
+ if((scenario==='empty-cache'||scenario==='startup-late-empty-text')&&window.fixture)return;
  if(getComputedStyle(document.querySelector('.cloud-tree-list-container')).visibility==='hidden')return;
  const first=Math.max(0,Math.floor(list.scrollTop/36)-2),last=Math.min(records.length,Math.ceil((list.scrollTop+list.clientHeight)/36)+2);
  const visible=records.map((row,index)=>({row,index})).filter(({row,index})=>(!scenario.startsWith('delayed')||row.type!=='folder'||opened.has(row.cloudId)&&loaded.has(row.cloudId))&&(row.type==='organization'||index>=first&&index<last));
@@ -64,7 +64,7 @@ function renderRows(){
 }
 list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
 const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');const memory=saved||{};const listeners=[];
-if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
+if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||(scenario.startsWith('retry')||scenario.startsWith('startup-'))||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
 window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
 history.replaceState(null,'','/clouds');
 if(!saved&&scenario==='delayed-native-selection'){
@@ -88,7 +88,7 @@ if(!saved&&scenario==='multi-grouped'){
  memory[prefix+':layout']={scopeKey:prefix+':organization:id:org-alpha',width:320,collapsedOrganizations:[]};
 }
 if(!saved&&scenario==='multi-saved'){const k='yc-power:'+location.origin+':organization:id:org-beta';memory[k]={mine:['cloud-beta'],initialized:true,width:320,custom:{}};delete memory['yc-power:'+location.origin+':organization:id:org-alpha'];memory['yc-power:'+location.origin+':layout']={scopeKey:k,width:320}}
-if(!saved&&(scenario==='delayed-cache'||scenario==='delayed-tooltips'||scenario==='empty-cache'||scenario.startsWith('retry')||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-old',name:'Cached folder',href:'/clouds/cloud-alpha/folder-old',cloudId:'cloud-alpha'}]}];
+if(!saved&&(scenario==='delayed-cache'||scenario==='delayed-tooltips'||scenario==='empty-cache'||(scenario.startsWith('retry')||scenario.startsWith('startup-'))||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':catalog']=[{type:'cloud',id:'cloud-alpha',name:'Alpha core',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-old',name:'Cached folder',href:'/clouds/cloud-alpha/folder-old',cloudId:'cloud-alpha'}]}];
 if(!saved&&scenario==='expand-state')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine.push('cloud-beta');
 if(!saved&&scenario==='cloud-order')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-analytics','cloud-beta'];
 if(!saved&&scenario==='cloud-order-scroll')memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-beta'];
@@ -96,7 +96,21 @@ if(!saved&&scenario==='folder-order')memory['yc-power:'+location.origin+':organi
 if(!saved&&['empty-cloud','becomes-empty'].includes(scenario))memory['yc-power:'+location.origin+':organization:id:org-alpha'].expandedClouds=['cloud-alpha'];
 const widths=[];
 new MutationObserver(()=>{const host=document.querySelector('[data-ycp-host]');if(host)widths.push(host.parentElement.getBoundingClientRect().width)}).observe(document.querySelector('.console-dashboard-layout__aside'),{childList:true,subtree:true,attributes:true});
-window.fixture={scenario,records,memory,renderRows,widths,get expansionClicks(){return expansionClicks}};
+window.fixture={scenario,records,memory,renderRows,widths,scanStarts:[],errors:[],get expansionClicks(){return expansionClicks}};
+if(scenario.startsWith('retry')||scenario.startsWith('startup-')){
+ const ReadinessObserver=MutationObserver,roots=new WeakSet();
+ const observeStatus=()=>{const root=document.querySelector('[data-ycp-host]')?.shadowRoot;if(!root||roots.has(root))return;roots.add(root);let loading=false,error=false;const record=()=>{const text=root.querySelector('.ycp-status')?.textContent||'',nextLoading=text.includes('Loading cloud list'),nextError=text.includes('Could not read');if(nextLoading&&!loading)fixture.scanStarts.push(performance.now());if(nextError&&!error)fixture.errors.push(performance.now());loading=nextLoading;error=nextError};new ReadinessObserver(record).observe(root,{childList:true,subtree:true,characterData:true});record()};
+ new ReadinessObserver(observeStatus).observe(document.body,{childList:true,subtree:true});observeStatus();
+ fixture.replaceTree=()=>{const old=document.querySelector('.cloud-tree-list-container'),replacement=old.cloneNode(true);replacement.querySelectorAll('[data-ycp-host],.ycp-native-return-slot,.ycp-add-native').forEach(node=>node.remove());old.replaceWith(replacement);list=replacement.querySelector('.cloud-tree-list');ul=list.querySelector('ul');list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();fixture.readyAt=performance.now()};
+}
+if(scenario.startsWith('startup-container-late')){const tree=document.querySelector('.cloud-tree-list-container'),aside=tree.parentElement;tree.remove();fixture.retryStartedAt=performance.now();setTimeout(()=>{aside.append(tree);fixture.readyAt=performance.now();renderRows()},scenario.endsWith('5s')?5500:200)}
+if(scenario==='startup-late-attribute'){
+ fixture.retryStartedAt=performance.now();const rows=[...ul.querySelectorAll('[data-list-item]')].map(row=>[row,row.dataset.listItem]);for(const [row]of rows)row.removeAttribute('data-list-item');setTimeout(()=>{fixture.readyAt=performance.now();for(const [row,id]of rows)row.setAttribute('data-list-item',id)},5200);
+}
+if(scenario==='startup-late-empty-text'){
+ fixture.retryStartedAt=performance.now();const text=document.createTextNode('Loading clouds');ul.replaceChildren(text);ul.style.height='0';setTimeout(()=>{fixture.readyAt=performance.now();text.data='No clouds'},5200);
+}
+if(scenario==='startup-tree-replaced'){fixture.retryStartedAt=performance.now();list.classList.remove('cloud-tree-list');setTimeout(()=>{list.classList.add('cloud-tree-list');fixture.replaceTree()},750)}
 if(scenario==='delayed-native-selection'){
  history.replaceState(null,'','/folders/unknown-folder/dashboard');
  fixture.selectNativeCloud=id=>{nativeSelectedCloud=id;for(const row of document.querySelectorAll('[data-list-item^="cloud."]')){row.removeAttribute('aria-selected');if(row.dataset.listItem==='cloud.'+id)row.setAttribute('aria-selected','true')}};
@@ -113,9 +127,14 @@ if(scenario==='failed')document.querySelector('.cloud-tree-list').remove();
 if(scenario==='becomes-empty')fixture.removeAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='folder-alpha');records.splice(index,1);ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='becomes-empty')fixture.addAlphaFolder=()=>{const index=records.findIndex(r=>r.id==='cloud-alpha');records.splice(index+1,0,{type:'folder',id:'folder-alpha',name:'Alpha folder',cloudId:'cloud-alpha'});ul.style.height=records.length*36+'px';renderRows()};
 if(scenario==='folder-order')fixture.reverseAlpha=()=>{const first=records.findIndex(r=>r.id==='cloud-alpha')+1;let end=first;while(end<records.length&&records[end].type==='folder')end++;records.splice(first,end-first,...records.slice(first,end).reverse());renderRows()};
-if(scenario.startsWith('retry')){fixture.retryStartedAt=performance.now();if(scenario==='retry-empty'){ul.replaceChildren();setTimeout(renderRows,750)}else{list.classList.remove('cloud-tree-list');if(scenario!=='retry-permanent')setTimeout(()=>list.classList.add('cloud-tree-list'),750)}}
+if(scenario.startsWith('retry')){fixture.retryStartedAt=performance.now();if(scenario==='retry-empty'){ul.replaceChildren();setTimeout(()=>{fixture.readyAt=performance.now();renderRows()},750)}else{list.classList.remove('cloud-tree-list');if(scenario!=='retry-permanent')setTimeout(()=>{fixture.readyAt=performance.now();list.classList.add('cloud-tree-list')},750)}}
 if(scenario==='empty-cache'){ul.replaceChildren();ul.style.height='0';const empty=document.createElement('div');empty.className='g-placeholder-container';empty.textContent='No clouds';ul.append(empty);list.removeEventListener('scroll',renderRows)}
 if(scenario==='small')document.querySelector('.cloud-tree-list-container').style.backgroundColor='rgb(243, 245, 247)';
+if(scenario==='startup-poll-fallback'){
+ fixture.retryStartedAt=performance.now();list.classList.remove('cloud-tree-list');setTimeout(()=>{fixture.readyAt=performance.now();list.classList.add('cloud-tree-list')},750);
+ const NativeObserver=MutationObserver;fixture.suppressAppObservers=true;window.MutationObserver=class extends NativeObserver{constructor(callback){super((records,observer)=>{if(!fixture.suppressAppObservers)callback(records,observer)})}};
+}
+
 </script>
 <script src="/content.js"></script>
 </body>
