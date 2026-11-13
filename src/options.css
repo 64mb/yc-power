@@ -18,6 +18,7 @@ body { margin: 0; min-width: 0; width: 500px; max-width: 100%; background: var(-
 .settings-card .settings-appearance p { margin-top: 8px; }
 .settings-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 4px; }
 .settings-status { flex: 1; min-width: 0; }
+.settings-transfer { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
 .settings-actions > .g-button { flex-shrink: 0; }
 @media (min-width: 600px) { body { width: 100%; } .settings { padding-top: 48px; } }
 

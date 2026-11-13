@@ -4,7 +4,7 @@
   <p>A focused cloud navigation panel for the Yandex Cloud console</p>
 </div>
 
-YC Power brings your frequently used clouds and folders together in a compact sidebar for Firefox and Zen. Your selection and customizations stay in local browser storage, separately for each organization and console origin.
+YC Power brings your frequently used clouds and folders together in a compact sidebar for Firefox, Zen, and Chromium. Your selection and customizations stay in local browser storage, separately for each organization and console origin.
 
 ![YC Power workspace with a selection of clouds and folders](docs/screenshots/workspace.png)
 
@@ -27,6 +27,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Use compact Gravity UI actions and drag the sidebar edge to adjust its width, with an automatic minimum that keeps the actions on one line and a 440 px maximum
 - Start with the current cloud automatically selected when it can be identified on first use
 - Enable compact mode in extension settings to reduce row height and spacing
+- Export settings as two-space-indented JSON and import them across browsers; imported settings are staged until you select **Save**, when the browser requests any required permissions
 - Follow the console's Gravity theme and font, including light and dark themes
 - Use Russian or English according to the console language; extension settings follow the browser language, with English as the fallback
 
@@ -38,7 +39,7 @@ Screenshots use the real console interface with demo cloud and folder names. The
 
 ## Browser support and access
 
-YC Power supports desktop Firefox 140 and later and compatible versions of Zen. Android has not been tested.
+YC Power supports desktop Firefox 140 and later and compatible versions of Zen. A separate Manifest V3 development build supports Chromium 120 and later, including the Orca browser. Android has not been tested.
 
 By default the extension runs only on `https://console.yandex.cloud`. Use the extension icon to add other HTTPS console origins. The browser requests permission for each added origin. Enter an origin without a path, port, or parameters; an empty list disables the extension on all consoles. See [PRIVACY.md](PRIVACY.md) for details about data and permissions.
 
@@ -48,16 +49,30 @@ Download the signed XPI from [Releases](https://github.com/64mb/yc-power/release
 
 ## Build and test
 
-Node.js and Python 3 are required. React and Gravity UI are bundled locally; no third-party Python packages are required.
+Node.js 24 or later and npm are required. React and Gravity UI are bundled locally. All build and test scripts use JavaScript; Python is not required.
 
 ```sh
 npm ci
-npm run build
-npm test
-python3 tests/firefox-ui-smoke.py
+npm run build:firefox
+npm run test:firefox
+npm run smoke:firefox
 ```
 
-The build creates `build/yc-power-firefox.xpi`. It contains the extension and `THIRD_PARTY_NOTICES.txt` for bundled dependencies.
+The Firefox build creates the reproducible `build/yc-power-firefox.xpi` archive with sorted entries, fixed timestamps and file permissions. It contains the extension and `THIRD_PARTY_NOTICES.txt` for bundled dependencies.
+
+`npm run test:shared` runs browser-independent unit tests. `npm run test:firefox` and `npm run test:chromium` each run those shared tests and their browser background adapter tests. The smoke commands use `tests/run-browser-tests.mjs` to run Playwright exclusively in Docker against local synthetic fixtures. Docker must be running; no browser installation or host Keychain access is required. The runner uses the default Docker context when available, falls back to `colima`, and honors `DOCKER_CONTEXT` when set.
+
+## Chromium development build
+
+```sh
+npm run build:chromium
+npm run test:chromium
+npm run smoke:chromium
+```
+
+The build creates the unpacked extension in `build/chromium`, independently of the Firefox XPI. Open `chrome://extensions` in Chromium, enable Developer mode, choose **Load unpacked**, and select that directory. Use Orca's browser extension settings to load the same directory where supported. Reload the extension after rebuilding it.
+
+The Chromium build uses a Manifest V3 service worker and persistent content script registration. It applies the same per-origin permissions and browser-local settings as Firefox, and injects into matching tabs that are already open. Settings are separate between browsers and profiles. This is an unpacked development build, not a signed or store-published package.
 
 ## Install for development
 

@@ -1,11 +1,12 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Button, Card, Icon, Switch, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
-import {Plus, TrashBin, FloppyDisk, FolderTree, Clouds} from '@gravity-ui/icons';
+import {Button, Card, Icon, Checkbox, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
+import {Plus, TrashBin, FloppyDisk, FolderTree, Clouds, ArrowDownToLine, ArrowUpFromLine} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
 import {TooltipLayer} from './TooltipLayer.jsx';
 import {getLanguage, messages} from './options-i18n.js';
+import Transfer from '../settings-transfer.js';
 
 const language = getLanguage();
 const t = messages[language];
@@ -30,6 +31,8 @@ function Settings() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
+    const [imported, setImported] = useState(null);
+    const importInput = useRef(null);
     useEffect(() => {
         browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts']).then((stored) => {
             const disabledHosts = new Set((Array.isArray(stored.cloudOnlyHosts) ? stored.cloudOnlyHosts : []).flatMap((host) => {
@@ -46,6 +49,28 @@ function Settings() {
             setStatus({theme: 'danger', message: t.loadFailed});
         });
     }, []);
+    async function exportSettings() {
+        try {
+            const data = Transfer.exportSettings(await browser.storage.local.get(null));
+            const url = URL.createObjectURL(new Blob([data], {type: 'application/json'}));
+            const link = document.createElement('a');
+            link.href = url; link.download = 'yc-power-settings.json'; link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch { setStatus({theme: 'danger', message: t.exportFailed}); }
+    }
+    async function importSettings(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+            if (file.size > Transfer.MAX_BYTES) throw new Error('File too large');
+            const settings = Transfer.parseSettings(await file.text());
+            setImported(settings);
+            setHosts(settings.domainHosts.map(host => ({host, cloudOnly: settings.cloudOnlyHosts.includes(host)})));
+            setCompactDensity(settings.compactDensity);
+            setStatus({theme: 'success', message: t.importReady});
+        } catch { setStatus({theme: 'danger', message: t.importFailed}); }
+    }
     async function save(event) {
         event.preventDefault();
         try {
@@ -66,7 +91,8 @@ function Settings() {
             }
             const stored = await browser.storage.local.get('domainHosts');
             const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
-            await browser.storage.local.set({domainHosts: next, compactDensity, cloudOnlyHosts});
+            await browser.storage.local.set({...imported, domainHosts: next, compactDensity, cloudOnlyHosts});
+            setImported(null);
             const removed = previous.flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }).filter((host) => !next.includes(host) && !DEFAULT_HOSTS.includes(host));
@@ -83,7 +109,7 @@ function Settings() {
             <div><Text as="h1" variant="header-1">YC Power</Text><Text color="secondary">{t.settings}</Text></div>
         </header>
         <Card className="settings-card" view="outlined">
-            <Text as="h2" variant="subheader-2">{t.domains}</Text>
+            <Text as="h2" variant="subheader-1">{t.domains}</Text>
             <Text as="p" color="secondary">{t.intro}</Text>
             <form onSubmit={save}>
                 <div className="domain-list">
@@ -103,17 +129,22 @@ function Settings() {
                 </div>
                 {!hosts.length && <Text as="p" color="secondary">{t.empty}</Text>}
                 <Button view="flat" disabled={loading || saving} onClick={() => setHosts((current) => [...current, {host: '', cloudOnly: false}])}><Icon data={Plus} size={16}/>{t.add}</Button>
-                <Text className="settings-hint" as="p" variant="caption-1" color="secondary">{t.hint}</Text>
+                <Text className="settings-hint" as="p" variant="body-1" color="secondary">{t.hint}</Text>
                 <section className="settings-appearance" aria-labelledby="appearance-heading">
-                    <Text as="h2" variant="subheader-2" id="appearance-heading">{t.appearance}</Text>
-                    <Switch size="l" checked={compactDensity} onUpdate={setCompactDensity} disabled={loading || saving}
-                        controlProps={{'aria-describedby': 'compact-density-hint'}}>{t.compactDensity}</Switch>
-                    <Text as="p" variant="caption-1" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
+                    <Text as="h2" variant="subheader-1" id="appearance-heading">{t.appearance}</Text>
+                    <Checkbox size="m" checked={compactDensity} onUpdate={setCompactDensity} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'compact-density-hint'}}>{t.compactDensity}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
                 </section>
+                <input ref={importInput} type="file" accept="application/json,.json" hidden onChange={importSettings}/>
+                <div className="settings-transfer">
+                    <Button view="flat" disabled={loading || saving} onClick={exportSettings} data-ycp-tooltip={t.exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
+                    <Button view="flat" disabled={loading || saving} onClick={() => importInput.current.click()} data-ycp-tooltip={t.importSettings}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
+                </div>
                 <div className="settings-actions">{status && <Text className="settings-status" variant="caption-1" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>
-        <Text as="p" variant="caption-2" color="secondary">{t.privacy}</Text>
+        <Text as="p" variant="body-1" color="secondary">{t.privacy}</Text>
     </main>;
 }
 

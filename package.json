@@ -3,16 +3,22 @@
   "version": "1.4.1",
   "private": true,
   "scripts": {
-    "build": "node build.mjs && python3 build.py",
-    "test": "node --test tests/*.test.cjs"
+    "build:firefox": "node build.mjs && node package-firefox.mjs",
+    "build:chromium": "node build.mjs --chromium && node build-chromium.mjs",
+    "test:shared": "node --test tests/core.test.cjs tests/i18n.test.cjs tests/organization.test.cjs tests/preferences.test.cjs tests/settings-transfer.test.cjs",
+    "test:firefox": "npm run test:shared && node --test tests/firefox-background.test.cjs",
+    "test:chromium": "npm run test:shared && node --test tests/chromium-background.test.cjs",
+    "smoke:firefox": "node tests/run-browser-tests.mjs firefox",
+    "smoke:chromium": "node tests/run-browser-tests.mjs chromium"
   },
   "dependencies": {
+    "@gravity-ui/icons": "2.23.1",
     "@gravity-ui/uikit": "^7.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@gravity-ui/icons": "2.23.1"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "esbuild": "^0.25.0"
   }
 }

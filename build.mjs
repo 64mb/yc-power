@@ -1,12 +1,16 @@
 import {build} from 'esbuild';
-import {readFile, readdir, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, readdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
+const chromium = process.argv.includes('--chromium');
+const outputDirectory = chromium ? 'build/chromium' : '.';
+await mkdir(outputDirectory, {recursive: true});
+const output = (name) => path.join(outputDirectory, name);
 const marker = '__YC_POWER_BUNDLED_GRAVITY_CSS__';
 const shared = {
     bundle: true,
     format: 'iife',
-    target: ['firefox109'],
+    target: [chromium ? 'chrome120' : 'firefox109'],
     jsx: 'automatic',
     write: false,
     metafile: true,
@@ -23,17 +27,17 @@ const shared = {
     define: {'process.env.NODE_ENV': '"production"'},
 };
 const result = await build({...shared,
-    entryPoints: ['src/content.jsx'], outfile: 'content.js',
+    entryPoints: ['src/content.jsx'], outfile: output('content.js'),
     define: {...shared.define, __YCP_GRAVITY_CSS__: JSON.stringify(marker)},
 });
-const options = await build({...shared, entryPoints: ['src/options.jsx'], outfile: 'options.js'});
+const options = await build({...shared, entryPoints: ['src/options.jsx'], outfile: output('options.js')});
 for (const file of options.outputFiles) await writeFile(file.path, file.contents);
 const javascript = result.outputFiles.find((file) => file.path.endsWith('.js'));
 const stylesheet = result.outputFiles.find((file) => file.path.endsWith('.css'));
 if (!javascript || !stylesheet || !javascript.text.includes(JSON.stringify(marker))) {
     throw new Error('Expected JavaScript, CSS, and the Gravity CSS placeholder');
 }
-await writeFile('content.js', javascript.text.replaceAll(JSON.stringify(marker), () => JSON.stringify(stylesheet.text)));
+await writeFile(output('content.js'), javascript.text.replaceAll(JSON.stringify(marker), () => JSON.stringify(stylesheet.text)));
 
 const packageDirectories = new Set();
 const bundledInputs = new Set([...Object.values(result.metafile.outputs), ...Object.values(options.metafile.outputs)].flatMap((output) =>
@@ -60,4 +64,4 @@ for (const directory of [...packageDirectories].sort()) {
         notices.push(file, await readFile(path.join(directory, file), 'utf8'), '');
     }
 }
-await writeFile('THIRD_PARTY_NOTICES.txt', notices.join('\n'));
+await writeFile(output('THIRD_PARTY_NOTICES.txt'), notices.join('\n'));
