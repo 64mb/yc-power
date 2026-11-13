@@ -14,7 +14,7 @@ export default defineConfig({
     use: {baseURL: 'http://127.0.0.1:4173', viewport: {width: 1200, height: 800}, screenshot: 'only-on-failure', trace: 'retain-on-failure'},
     webServer: {command: 'node tests/fixture-server.mjs', url: 'http://127.0.0.1:4173/tests/fixtures/options.html', reuseExistingServer: false},
     projects: [
-        {name: 'firefox', testMatch: 'firefox-ui-smoke.spec.mjs', use: {browserName: 'firefox'}},
+        {name: 'firefox', testMatch: 'firefox*.spec.mjs', use: {browserName: 'firefox'}},
         {name: 'chromium', testMatch: 'chromium-ui-smoke.spec.mjs', use: {browserName: 'chromium'}},
     ],
 });
