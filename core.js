@@ -35,7 +35,9 @@
         const regionId = params.get('targetRegionId');
         const targetPath = params.get('targetPath');
         const allowed = ['targetRegionId', 'targetService', 'targetPath'];
-        if ([...params.keys()].some(key => !allowed.includes(key)) || allowed.some(key => params.getAll(key).length !== 1)) return null;
+        let unexpected = false;
+        params.forEach((value, key) => { if (!allowed.includes(key)) unexpected = true; });
+        if (unexpected || allowed.some(key => params.getAll(key).length !== 1)) return null;
         if (params.get('targetService') !== 'console' || !/^[a-z0-9-]{1,32}$/i.test(regionId || '') || !/^\/(?:clouds?|folders)\//.test(targetPath || '')) return null;
         const target = new URL(targetPath, origin);
         if (target.origin !== origin || target.search || target.hash) return null;

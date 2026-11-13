@@ -87,3 +87,24 @@ test('cloud-only navigation uses validated native selection when a folder has no
   assert.equal(currentCloud(clouds, '/folders/known-folder/dashboard', origin, 'cloud-alpha').id, 'cloud-beta');
   assert.equal(currentOrganization(clouds, href, origin, 'org-beta', 'cloud-alpha').id, 'org-alpha');
 });
+
+test('regional links work when Firefox exposes a non-iterable search parameter iterator', () => {
+  const vm = require('node:vm');
+  const fs = require('node:fs');
+  class WrappedURL extends URL {
+    get searchParams() {
+      const params = super.searchParams;
+      return {
+        get: key => params.get(key), getAll: key => params.getAll(key),
+        forEach: callback => params.forEach(callback),
+        keys: () => ({next: () => ({done: true})}),
+      };
+    }
+  }
+  const module = {exports: {}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../core.js'), 'utf8'), {module, URL: WrappedURL});
+  const href = '/auth/move?targetRegionId=kz&targetService=console&targetPath=%2Fcloud%2Fcloud-regional';
+  assert.equal(module.exports.route(href, origin).id, 'cloud-regional');
+  assert.equal(module.exports.route(href + '&unexpected=value', origin), null);
+  assert.equal(module.exports.route(href + '&targetRegionId=other', origin), null);
+});

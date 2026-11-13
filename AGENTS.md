@@ -29,7 +29,9 @@
 ## Verification and review
 
 - Run checks appropriate to the change
-- Use `npm test` for unit tests and `python3 tests/firefox-ui-smoke.py` for Firefox UI regression checks
+- Use `npm run test:shared` for shared unit tests, `npm run test:firefox` or `npm run test:chromium` for shared tests plus one browser adapter, and `npm run smoke:firefox` or `npm run smoke:chromium` for browser UI regression checks
+- Use Node.js 24 or later for `npm ci`; build with `npm run build:firefox` or `npm run build:chromium`
+- Smoke checks run Playwright exclusively in Docker through `tests/run-browser-tests.mjs` and require Docker to be running, with no host browser installation or Keychain access; the runner uses the default context when available, falls back to `colima`, and honors `DOCKER_CONTEXT` when set
 - For UI changes, inspect screenshots for alignment, spacing, matching fonts, light and dark themes, clipping, and working scroll areas
 - Use Gravity UI UIKit and Gravity icons, preserving the console's native appearance
 - Always obtain a separate final code review from a sub-agent using `gpt-6.1-sol` with `medium` reasoning effort, address actionable findings, and verify the final result before reporting completion

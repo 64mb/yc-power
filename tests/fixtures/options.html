@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Options fixture</title>
+<base href="/">
+<link rel="stylesheet" href="/options.css">
+<script>
+const scenario = new URLSearchParams(location.search).get('scenario');
+const memory = JSON.parse(sessionStorage.getItem('options:' + scenario) || '{}');
+window.fixture = {memory, requests: [], writes: []};
+window.browser = {
+    i18n: {getUILanguage: () => 'en'},
+    storage: {local: {
+        get: async keys => typeof keys === 'string' ? {[keys]: structuredClone(memory[keys])} : structuredClone(memory),
+        set: async values => {
+            fixture.writes.push(structuredClone(values));
+            Object.assign(memory, structuredClone(values));
+            sessionStorage.setItem('options:' + scenario, JSON.stringify(memory));
+        },
+    }},
+    permissions: {
+        request: async request => { fixture.requests.push(structuredClone(request)); return scenario !== 'options-denied'; },
+        remove: async () => true,
+    },
+};
+</script>
+<script src="/options.js" defer></script>
+</head>
+<body><div id="root"></div></body>
+</html>
