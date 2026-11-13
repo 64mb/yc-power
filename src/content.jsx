@@ -29,7 +29,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   let state = {...defaults(), clouds: []};
   let scanReady = false, selectedOrganizationId = null;
   let nativeReturnSlot, nativeReturnTarget;
-  let tree, aside, host, root, shadow, observer, themeObserver, timer, saveTimer;
+  let tree, aside, host, root, shadow, observer, themeObserver, lifecycleObserver, timer, saveTimer;
+  let mountPoll = null, mountQueued = false;
   let busy = false, native = false, allOpen = false, edit = null, stopped = false;
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
   let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false, foldersEnabled = true;
@@ -224,32 +225,54 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   const loadedFolders = new Set(), attemptedFolders = new Set(), pendingFolders = new Map();
   let scanGeneration = 0, queueScheduled = false, activeScan = null;
-  let startupScan = false, startupRetryUsed = false, startupRetryTimer = null, startupRetryQueued = false;
-  function cancelStartupRetry() {
-    clearTimeout(startupRetryTimer);
-    startupRetryTimer = null; startupRetryQueued = false; startupScan = false;
+  let startupWaiting = false, startupWaitTree = null, startupPoll = null, startupDeadlineTimer = null;
+  function cancelStartupWait() {
+    clearTimeout(startupPoll); clearTimeout(startupDeadlineTimer);
+    startupPoll = null; startupDeadlineTimer = null;
+    startupWaiting = false; startupWaitTree = null;
+  }
+  function confirmedEmpty(list) {
+    return list && !tree.querySelector('[role="progressbar"], .g-spin, [aria-busy="true"], [role="alert"]') && /no clouds|нет облаков|облака не найдены|не найдено облаков|no results|ничего не найдено/i.test(list.textContent);
+  }
+  function treeReady() {
+    const list = tree?.isConnected && tree.querySelector('.cloud-tree-list');
+    return Boolean(list && ([...list.querySelectorAll('[data-list-item^="cloud."]')].some(row => !row.dataset.listItem.endsWith('.pinned')) || confirmedEmpty(list)));
+  }
+  function checkStartupReadiness() {
+    if (!startupWaiting || stopped || startupWaitTree !== tree || !treeReady()) return;
+    cancelStartupWait();
+    statusKey = native || allOpen ? 'scanPaused' : 'cloudCount';
+    rescan = true;
+    scheduleScans();
+  }
+  function beginStartupWait() {
+    cancelStartupWait();
+    startupWaiting = true; startupWaitTree = tree;
+    statusKey = state.clouds.length ? 'cloudCount' : 'reading';
+    const waitingTree = tree;
+    const valid = () => !stopped && startupWaiting && tree === waitingTree && tree?.isConnected;
+    const poll = () => {
+      startupPoll = null;
+      if (!valid()) return;
+      checkStartupReadiness();
+      if (startupWaiting) startupPoll = setTimeout(poll, 50);
+    };
+    startupDeadlineTimer = setTimeout(() => {
+      startupDeadlineTimer = null;
+      if (!valid()) return;
+      clearTimeout(startupPoll); startupPoll = null;
+      statusKey = 'scanFailed';
+      render();
+    }, 5000);
+    checkStartupReadiness();
+    if (startupWaiting) startupPoll = setTimeout(poll, 50);
   }
   function scanFailed(target) {
-    if (!target && startupScan && !startupRetryUsed) {
-      startupRetryUsed = true;
-      rescan = false;
-      statusKey = 'cloudCount';
-      const retryTree = tree, retryKey = key;
-      startupRetryTimer = setTimeout(() => {
-        startupRetryTimer = null;
-        if (stopped || tree !== retryTree || key !== retryKey || !tree?.isConnected) return;
-        startupRetryQueued = true;
-        scheduleScans();
-      }, 1000);
-      return;
-    }
-    if (!target) cancelStartupRetry();
     statusKey = 'scanFailed';
     if (!state.mine.length) allOpen = true;
   }
   const folderKey = id => `${key}:${id}`;
   function invalidateScans() {
-    cancelStartupRetry();
     clearCloudDrag();
     scanGeneration++; pendingFolders.clear(); loadedFolders.clear(); attemptedFolders.clear();
     if (busy) rescan = true;
@@ -269,11 +292,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     queueScheduled = true;
     queueMicrotask(() => {
       queueScheduled = false;
-      if (busy || stopped || native || allOpen || startupRetryTimer !== null || !tree?.isConnected) return;
-      if (startupRetryQueued) {
-        startupRetryQueued = false; rescan = false;
-        void scan(); return;
-      }
+      if (busy || stopped || native || allOpen || startupWaiting || !tree?.isConnected) return;
       if (rescan) { rescan = false; void scan(); return; }
       for (const [requestKey, request] of pendingFolders) {
         pendingFolders.delete(requestKey);
@@ -472,12 +491,15 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     throw new Error('Virtual rows did not catch up with scrolling');
   }
   function refreshClouds() {
-    cancelStartupRetry();
+    if (busy || native || allOpen) { void scan(); return; }
+    if (!treeReady()) { beginStartupWait(); render(); return; }
+    cancelStartupWait();
+    rescan = false;
     void scan();
   }
   async function scan(target) {
     if (target && !cloudFoldersEnabled(state.clouds.find(cloud => cloud.id === target))) return;
-    if (startupRetryTimer !== null || startupRetryQueued) {
+    if (startupWaiting) {
       if (target) queueFolderScan(target, true);
       return;
     }
@@ -544,11 +566,10 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       }
       if (!valid()) return;
       const freshRows = [...rows.values()];
-      const confirmedEmpty = !target && !tree.querySelector('[role="progressbar"], .g-spin, [aria-busy="true"], [role="alert"]') && /no clouds|нет облаков|облака не найдены|не найдено облаков|no results|ничего не найдено/i.test(list.textContent);
-      if (!target && !freshRows.some(row => row.type === 'cloud') && !confirmedEmpty) throw new Error('Cloud list is not ready');
+      const empty = !target && confirmedEmpty(list);
+      if (!target && !freshRows.some(row => row.type === 'cloud') && !empty) throw new Error('Cloud list is not ready');
       if (freshRows.some(row => row.type === 'cloud')) state.clouds = Core.catalog(freshRows, state.clouds, found ? target : undefined);
-      else if (confirmedEmpty) state.clouds = [];
-      if (!target) cancelStartupRetry();
+      else if (empty) state.clouds = [];
       saveCatalog();
       if (target && found) loadedFolders.add(folderKey(target));
       scanReady = true;
@@ -777,23 +798,50 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       themeOverrides['--g-text-body-1-line-height'] = font.lineHeight;
     }
   }
+  function scheduleMount() {
+    if (mountQueued || stopped) return;
+    mountQueued = true;
+    queueMicrotask(() => { mountQueued = false; if (!stopped) mount(); });
+  }
+  function watchTreeLifecycle() {
+    const selector = '.console-dashboard-layout__aside, .cloud-tree-list-container';
+    lifecycleObserver = new MutationObserver(records => {
+      const detached = tree && !tree.isConnected || host && !host.isConnected;
+      const changed = records.some(record => {
+        if (record.type === 'attributes') return record.target === tree || record.target === aside || record.target.matches(selector);
+        if (record.target === aside) return true;
+        return [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element && (node.matches(selector) || node.querySelector(selector)));
+      });
+      if (detached || changed) scheduleMount();
+    });
+    lifecycleObserver.observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+    const deadline = performance.now() + 5000;
+    const poll = () => {
+      mountPoll = null;
+      if (stopped) return;
+      mount();
+      if (!host?.isConnected && performance.now() < deadline) mountPoll = setTimeout(poll, 50);
+    };
+    poll();
+  }
   function mount() {
     const nextTree = document.querySelector('.console-dashboard-layout__aside .cloud-tree-list-container');
     if (!nextTree) {
-      if (host?.isConnected) {
-        observer?.disconnect(); root?.unmount(); host.remove(); root = null;
+      if (tree || host || root) {
+        observer?.disconnect(); root?.unmount(); host?.remove(); root = null;
         restoreNativeTree(); aside?.removeAttribute('data-ycp-aside'); aside?.style.removeProperty('--ycp-width');
-        invalidateScans(); scanReady = false;
+        cancelStartupWait(); invalidateScans(); scanReady = false;
         tree = null; aside = null; host = null;
       }
       return;
     }
-    if (nextTree === tree && host?.isConnected) { ensureNativeReturn(); return; }
+    if (nextTree === tree && host?.isConnected) { ensureNativeReturn(); checkStartupReadiness(); return; }
+    cancelStartupWait();
     observer?.disconnect(); root?.unmount(); host?.remove();
     restoreNativeTree(); aside?.removeAttribute('data-ycp-aside'); aside?.style.removeProperty('--ycp-width');
     invalidateScans(); scanReady = false;
-    startupScan = true; startupRetryUsed = false;
     tree = nextTree; aside = tree.parentElement;
+    clearTimeout(mountPoll); mountPoll = null;
     aside.querySelectorAll(':scope > [data-ycp-host]').forEach(node => node.remove());
     tree.querySelectorAll('.ycp-add-native, .ycp-native-return-slot').forEach(node => node.remove());
     aside.dataset.ycpAside = ''; applyWidth();
@@ -805,14 +853,19 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     root = createRoot(app);
     observer = new MutationObserver(() => {
       decorateNative();
-      if (!busy && !native && scanReady && !state.clouds.length && tree.querySelector('[data-list-item^="cloud."]')) void scan();
+      checkStartupReadiness();
+      if (!busy && !native && !startupWaiting && !rescan && scanReady && !state.clouds.length && tree.querySelector('[data-list-item^="cloud."]')) {
+        if (treeReady()) void scan();
+        else { beginStartupWait(); render(); }
+      }
     });
-    observer.observe(tree, {childList: true, subtree: true});
+    observer.observe(tree, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'aria-busy', 'role', 'data-list-item']});
+    beginStartupWait();
     setNativeVisibility(); decorateNative(); render();
-    if (busy) rescan = true; else void scan();
   }
   function cleanup() {
-    cancelStartupRetry();
+    cancelStartupWait();
+    clearTimeout(mountPoll); lifecycleObserver?.disconnect();
     clearCloudDrag();
     preferenceSync.flush(key).catch(() => {});
     stopped = true; clearInterval(timer); clearTimeout(saveTimer); observer?.disconnect(); themeObserver?.disconnect(); window.removeEventListener('resize', onResize);
@@ -870,15 +923,15 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       if (stored && Array.isArray(stored.mine)) state = {...state, ...stored, clouds: state.clouds};
       state.width = Math.min(440, Math.max(1, Number(stored?.width ?? layout?.width) || 360));
     } catch (_) { /* default settings remain usable if storage is unavailable */ }
+    if (stopped) return;
     window.addEventListener('resize', onResize);
     restoreExpanded();
     if (state.clouds.length) syncOrganization();
-    mount();
+    watchTreeLifecycle();
     themeObserver = new MutationObserver(() => { refreshTheme(); decorateNative(); render(); });
     themeObserver.observe(document.body, {attributes: true, attributeFilter: ['class', 'style']});
     themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
     timer = setInterval(() => {
-      mount();
       const activeId = currentCloud()?.id || null;
       if (location.href !== lastUrl || activeId !== lastActiveCloudId) { lastUrl = location.href; lastActiveCloudId = activeId; syncOrganization(); initializeMine(); render(); decorateNative(); }
     }, 1000);

@@ -152,28 +152,67 @@ def exercise(driver, origin, scenario):
         driver.evaluate('const key="yc-power:"+location.origin+":organization:id:org-alpha",prefs=structuredClone(fixture.memory[key]);prefs.custom["folder:folder-alpha"].label="AAA";browser.storage.local.set({[key]:prefs});return true;')
         driver.wait('return ('+ids+')[0]==="folder-alpha";')
         return {'scenario':scenario,'order':'display labels with numeric sorting','refresh':'stable despite reversed native arrival','rename':'reorders immediately','ties':'stable by ID'}
-    if scenario.startswith('retry'):
-        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return r?.querySelector(".ycp-folder a")&&!r.querySelector(".ycp-status");')
-        driver.evaluate('fixture.retrySeenAt=performance.now();const r=document.querySelector("[data-ycp-host]").shadowRoot;new MutationObserver(()=>{if(!fixture.retryLoadingAt&&r.querySelector(".ycp-status")?.textContent.includes("Loading cloud list"))fixture.retryLoadingAt=performance.now()}).observe(r,{childList:true,subtree:true,characterData:true});return true;')
-        assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
+    if scenario.startswith('retry') or scenario.startswith('startup-'):
+        if scenario == 'startup-container-late5s':
+            driver.wait('return performance.now()-fixture.retryStartedAt>5100;', timeout=8)
+            assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]");')
+        driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return !!r?.querySelector(".ycp-cloud");')
+        if scenario.startswith('retry') or scenario == 'startup-poll-fallback':
+            assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
+            assert not driver.evaluate('return fixture.scanStarts.length>0||fixture.errors.length>0;')
         if scenario == 'retry-permanent':
-            driver.wait('const s=document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent;return s?.includes("Could not read")&&!s.includes("1 second");')
-            assert driver.evaluate('return performance.now()-fixture.retryStartedAt;') >= 900
-            driver.evaluate('fixture.finalErrorAt=performance.now();return true;')
-            driver.wait('return performance.now()-fixture.finalErrorAt>2200;')
-            assert not driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-status")?.textContent.includes("1 second");')
-            return {'scenario': scenario, 'retry': 'once after 1 second', 'cache': 'retained after permanent failure'}
+            driver.wait('return performance.now()-fixture.retryStartedAt>4500;', timeout=7)
+            assert not driver.evaluate('return fixture.errors.length>0;')
+            driver.wait('return fixture.errors.length===1;', timeout=4)
+            assert driver.evaluate('return fixture.errors[0]-fixture.retryStartedAt;') >= 4900
+            assert not driver.evaluate('return fixture.scanStarts.length>0;')
+            assert driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder a")?.getAttribute("href").includes("folder-old");')
+            driver.evaluate('browser.storage.local.set({domainHosts:[]});return true;')
+            driver.wait('return !document.querySelector("[data-ycp-host]");')
+            driver.evaluate('document.querySelector(".cloud-tree-list-container > div:last-child").classList.add("cloud-tree-list");fixture.disabledAt=performance.now();return true;')
+            driver.wait('return performance.now()-fixture.disabledAt>1100;')
+            assert not driver.evaluate('return !!document.querySelector("[data-ycp-host]");')
+            driver.evaluate('sessionStorage.removeItem("fixture:retry-permanent");return true;')
+            driver.command('WebDriver:Navigate', {'url': origin + '/tests/fixtures/native-tree.html?scenario=retry-permanent'})
+            driver.wait('return !!document.querySelector("[data-ycp-host]");')
+            driver.evaluate('browser.storage.local.set({domainHosts:[]});fixture.disabledAt=performance.now();return true;')
+            driver.wait('return !document.querySelector("[data-ycp-host]");')
+            driver.wait('return performance.now()-fixture.disabledAt>5200;', timeout=7)
+            assert not driver.evaluate('return fixture.errors.length>0||fixture.scanStarts.length>0||!!document.querySelector("[data-ycp-host]");')
+            return {'scenario': scenario, 'deadline': 'one error after 5 seconds', 'cache': 'retained', 'cleanup': 'pending deadline and late readiness do not remount'}
+        if scenario in ['startup-late-attribute', 'startup-late-empty-text']:
+            driver.wait('return fixture.errors.length===1;', timeout=7)
+            assert driver.evaluate('return fixture.errors[0]-fixture.retryStartedAt;') >= 4900
+            assert driver.evaluate('return !fixture.readyAt||fixture.errors[0]<fixture.readyAt;')
         if scenario == 'retry-defers':
             driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
             expected = driver.evaluate('const list=document.querySelector(".cloud-tree-list-container > div:last-child");list.scrollTop=250;return list.scrollTop;')
-            driver.wait('return performance.now()-fixture.retrySeenAt>1200;')
-            assert not driver.evaluate('return !!fixture.retryLoadingAt;')
+            driver.wait('return !!fixture.readyAt&&performance.now()-fixture.readyAt>400;')
+            assert not driver.evaluate('return fixture.scanStarts.length>0;')
             assert driver.evaluate('return document.querySelector(".cloud-tree-list").scrollTop;') == expected
+            driver.evaluate('fixture.resumedAt=performance.now();return true;')
             driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
-        driver.wait('return !!fixture.retryLoadingAt;', timeout=15)
-        assert driver.evaluate('return fixture.retryLoadingAt-fixture.retryStartedAt;') >= 900
-        driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"));', timeout=25)
-        return {'scenario': scenario, 'retry': 'after 1 second', 'cache': 'visible until recovery', 'foreground': 'respected'}
+        driver.wait('return fixture.scanStarts.length>0;', timeout=8)
+        delay = driver.evaluate('return fixture.scanStarts[0]-(fixture.resumedAt||fixture.readyAt);')
+        assert 0 <= delay < 300, (scenario, delay)
+        if scenario == 'startup-late-empty-text':
+            driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return !r.querySelector(".ycp-cloud")&&!r.querySelector(".ycp-status");', timeout=25)
+            driver.wait('return fixture.memory["yc-power:"+location.origin+":catalog"]?.length===0;')
+            assert driver.evaluate('return fixture.scanStarts.length===1&&fixture.errors.length===1;')
+            return {'scenario': scenario, 'recovery': 'text mutation after deadline clears cached clouds', 'scans': 'once within 300 ms of readiness'}
+        driver.wait('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-alpha"))&&!Array.from(r.querySelectorAll(".ycp-folder a")).some(e=>e.getAttribute("href").includes("folder-old"))&&!r.querySelector(".ycp-status");', timeout=25)
+        assert driver.evaluate('return fixture.scanStarts.length;') == 1
+        assert driver.evaluate('return fixture.errors.length;') == (1 if scenario == 'startup-late-attribute' else 0)
+        if scenario == 'startup-tree-replaced':
+            driver.evaluate('fixture.replaceTree();return true;')
+            driver.wait('return fixture.scanStarts.length===2;')
+            assert driver.evaluate('return fixture.scanStarts[1]-fixture.readyAt;') < 300
+            driver.wait('const r=document.querySelector("[data-ycp-host]")?.shadowRoot;return !!r?.querySelector(".ycp-folder")&&!r.querySelector(".ycp-status");', timeout=25)
+            assert driver.evaluate('return document.querySelectorAll("[data-ycp-host]").length;') == 1
+        if scenario == 'startup-poll-fallback':
+            assert driver.evaluate('return fixture.suppressAppObservers;')
+            driver.evaluate('fixture.suppressAppObservers=false;return true;')
+        return {'scenario': scenario, 'readiness': 'scan starts within 300 ms of ready tree', 'scans': 'once per ready tree', 'foreground': 'respected'}
     if scenario == 'delayed-controls':
         driver.wait('return fixture.expansionClicks===1;', timeout=25)
         driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-all-row button")')
@@ -681,7 +720,7 @@ def main():
             driver.command('Marionette:SetContext', {'value': 'content'})
             driver.command('WebDriver:SetWindowRect', {'width': 1200, 'height': 800})
             origin = 'http://127.0.0.1:' + str(server.server_port)
-            for scenario in args.scenario or ['small', 'stale-mount', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'delayed-cache', 'delayed-tooltips', 'delayed-native-selection', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
+            for scenario in args.scenario or ['small', 'stale-mount', 'multi', 'virtual', 'delayed', 'delayed-cancel', 'delayed-controls', 'retry-startup', 'retry-empty', 'retry-defers', 'retry-permanent', 'startup-container-late', 'startup-container-late5s', 'startup-tree-replaced', 'startup-late-attribute', 'startup-late-empty-text', 'startup-poll-fallback', 'delayed-cache', 'delayed-tooltips', 'delayed-native-selection', 'delayed-clouds-only', 'delayed-cloud-icons', 'multi-saved', 'multi-grouped', 'multi-regional', 'empty-cache', 'expand-state', 'folder-icons', 'folder-order', 'empty-cloud', 'becomes-empty', 'cloud-order', 'cloud-order-scroll', 'failed']:
                 print(json.dumps(exercise(driver, origin, scenario)), flush=True)
             driver.command('WebDriver:DeleteSession')
         finally:

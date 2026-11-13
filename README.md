@@ -12,7 +12,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 
 - Add or remove clouds from **My clouds**; refresh clouds and their folders together from the header
 - See selected clouds from multiple organizations together in collapsible groups; existing selections and customizations stay separate for each organization
-- Display the previous local catalog immediately while refreshing it in the background; retry a failed initial read once after one second
+- Display the previous local catalog immediately while refreshing it in the background; detect console tree creation immediately and check readiness every 50 ms for up to five seconds
 - Open **All clouds** to use the original console tree and add clouds from it, or return to the default sidebar, including during loading
 - Background collection pauses while you use the original tree and resumes when you return to My clouds and close the full list
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
