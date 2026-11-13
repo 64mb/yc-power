@@ -45,7 +45,7 @@ By default the extension runs only on `https://console.yandex.cloud`. Use the ex
 
 ## Install
 
-Download the signed XPI from [Releases](https://github.com/64mb/yc-power/releases/latest). In Firefox or Zen, open `about:addons`, choose "Install Add-on From File" from the gear menu, and select the XPI. Updates keep the same extension ID and preserve your settings.
+When a Mozilla-signed XPI is attached to a [release](https://github.com/64mb/yc-power/releases/latest), install it through `about:addons` using "Install Add-on From File". A source ZIP is not an installation package. For an unsigned local build, use the temporary installation instructions below. Updates keep the same extension ID and preserve your settings.
 
 ## Build and test
 

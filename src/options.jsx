@@ -138,8 +138,8 @@ function Settings() {
                 </section>
                 <input ref={importInput} type="file" accept="application/json,.json" hidden onChange={importSettings}/>
                 <div className="settings-transfer">
-                    <Button view="flat" disabled={loading || saving} onClick={exportSettings} data-ycp-tooltip={t.exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
-                    <Button view="flat" disabled={loading || saving} onClick={() => importInput.current.click()} data-ycp-tooltip={t.importSettings}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
+                    <Button view="outlined" disabled={loading || saving} onClick={exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
+                    <Button view="outlined" disabled={loading || saving} onClick={() => importInput.current.click()}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
                 </div>
                 <div className="settings-actions">{status && <Text className="settings-status" variant="caption-1" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
