@@ -1,4 +1,4 @@
-# Chrome Web Store listing: YC Power 1.6.1
+# Chrome Web Store listing: YC Power 1.6.2
 
 ## Store details
 

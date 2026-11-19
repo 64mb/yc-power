@@ -281,7 +281,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   function ActiveDot({active}) {
     return active ? <span className="ycp-active-dot" role="img" aria-label={t('activeContext')} data-ycp-tooltip={t('activeContext')}/> : null;
   }
-  function OrganizationHeading({group}) {
+  function OrganizationHeading({group, showActive = true}) {
     const appearance = organizationSettings(group).appearance;
     const name = appearance?.label || group.name;
     return <div className="ycp-organization-row" onClick={() => toggleGroup(group.id)}>
@@ -290,7 +290,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         if (event.detail > 0) event.currentTarget.blur();
         toggleGroup(group.id);
       }}><Icon data={collapsedOrganizations.has(group.id) ? ChevronRight : ChevronDown} size={16}/></Button>
-      <span className="ycp-group-icon" style={{color: groupColor(appearance)}}><Icon data={Briefcase} size={16}/><ActiveDot active={group.clouds.some(cloud => activeCloud(cloud) && cloud.organizationId === (currentCloud()?.organizationId || organization?.id))}/></span>
+      <span className="ycp-group-icon" style={{color: groupColor(appearance)}}><Icon data={Briefcase} size={16}/><ActiveDot active={showActive && group.clouds.some(cloud => activeCloud(cloud) && cloud.organizationId === (currentCloud()?.organizationId || organization?.id))}/></span>
       <Text variant="body-1" data-ycp-tooltip={group.name}>{name}</Text>
       <Text variant="caption-2" color="secondary">{group.clouds.length}</Text>
       <GroupAction type="organization" name={group.name} cloud={group.clouds[0]}/>
@@ -1005,7 +1005,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         rememberExpanded(item.id); save(true); render();
       }}><Icon data={!empty && itemExpanded(item) ? ChevronDown : ChevronRight} size={16}/></Button> : <span className="ycp-disclosure-space"/>)}
       {item.type === 'folder' && <span className="ycp-indent"/>}
-      <span className="ycp-item-icon" data-ycp-tooltip={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item, parent)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item, parent)]} size={16}/><ActiveDot active={item.type === 'cloud' && activeCloud(item) && currentCloud()?.id === item.id}/></span>
+      <span className="ycp-item-icon" data-ycp-tooltip={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item, parent)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item, parent)]} size={16}/><ActiveDot active={item.type === 'cloud' && cloudFoldersEnabled(item) && activeCloud(item) && currentCloud()?.id === item.id}/></span>
       <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} onClick={event => navigateCached(event, item)} data-ycp-tooltip={`${item.name}\n${item.id}${activeCloud(item) ? '' : `\n${t('cachedFederation')}`}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
@@ -1082,7 +1082,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
           {federationId && !hideFederationLevel && <FederationHeading id={federationId} cloudCount={mine.length}/>}
           <PassportLevel enabled={personalMode() && showPersonalOrganizations} cloudCount={mine.length}>
           {(hideFederationLevel || !federationId || !collapsedOrganizations.has(federationGroupKey(federationId))) && groups.map(group => <div key={group.id} className={passportGroups ? 'ycp-organization-group ycp-passport-organization' : grouped || federationId ? 'ycp-organization-group' : undefined} data-organization-id={grouped || passportGroups ? group.id : undefined} data-organization-hidden={hideActiveOrganization || undefined}>
-            {!hideActiveOrganization && (grouped || passportGroups || (federationId && group.name)) && <OrganizationHeading group={group}/>}
+            {!hideActiveOrganization && (grouped || passportGroups || (federationId && group.name)) && <OrganizationHeading group={group} showActive={!hideFederationLevel || grouped}/>}
             {(hideActiveOrganization || !(grouped || federationId || passportGroups) || !collapsedOrganizations.has(group.id)) && group.clouds.map(cloud => {
             const folders = [...cloud.folders].sort((a, b) => folderNames.compare(display(a, cloud), display(b, cloud)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
             return <section className="ycp-group" key={cloud.id} data-cloud-id={cloud.id}>
