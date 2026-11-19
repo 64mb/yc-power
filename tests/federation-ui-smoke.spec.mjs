@@ -723,6 +723,12 @@ test('cloud-only mode hides a lone federation without losing collapse or organiz
   await openFederations(page);
   const heading = page.locator('.ycp-mine > [data-federation-id="federation-alpha"]');
   const organization = page.locator('.ycp-mine > .ycp-organization-group > .ycp-organization-row');
+  await page.evaluate(() => browser.storage.local.set({cloudOnlyHosts: [location.origin]}));
+  await expect(active(page).locator('.ycp-cloud')).toHaveAttribute('data-current', 'true');
+  await expect(active(page).locator('.ycp-active-dot')).toHaveCount(0);
+  await expect(organization.locator('.ycp-active-dot')).toHaveCount(1);
+  await page.evaluate(() => browser.storage.local.set({cloudOnlyHosts: []}));
+  await expect(active(page).locator('.ycp-cloud .ycp-active-dot')).toHaveCount(1);
   await heading.getByText('Alpha federation', {exact: true}).click();
   await expect(heading.locator('button').first()).toHaveAttribute('aria-expanded', 'false');
   await expect(active(page)).toHaveCount(0);
@@ -739,6 +745,8 @@ test('cloud-only mode hides a lone federation without losing collapse or organiz
   await expect(page.locator('.ycp-mine')).toHaveAttribute('data-federation-hidden', 'true');
   await expect(active(page)).toBeVisible();
   await expect(organization).toContainText('Alpha organization');
+  await expect(organization.locator('.ycp-active-dot')).toHaveCount(0);
+  await expect(active(page).locator('.ycp-cloud')).toHaveAttribute('data-current', 'true');
   await expect(active(page).locator('.ycp-folder')).toHaveCount(0);
   expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:layout`].collapsedOrganizations)).toContain('federation:federation-alpha');
   await page.evaluate(() => browser.storage.local.set({hideSingleOrganization: true}));
@@ -765,5 +773,7 @@ test('cloud-only mode hides a lone federation without losing collapse or organiz
   await expect(heading.locator('button').first()).toHaveAttribute('aria-expanded', 'true');
   await expect(organization).toBeVisible();
   await expect(active(page)).toBeVisible();
+  await expect(organization.locator('.ycp-active-dot')).toHaveCount(1);
+  await expect(active(page).locator('.ycp-cloud .ycp-active-dot')).toHaveCount(1);
   await expect(active(page).getByRole('link', {name: 'Active custom folder', exact: true})).toBeVisible();
 });
