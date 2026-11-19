@@ -2,6 +2,14 @@
 
 const messages = {
   en: {
+    activeContext: 'Current context',
+    passportClouds: 'Clouds in account {name}', passportAccount: 'Yandex account', customizePassport: 'Customize Yandex account {name}',
+    switchPassport: 'Choose a Yandex account in the console account menu to open this resource',
+    customizeOrganization: 'Customize organization {name}', customizeFederation: 'Customize federation {name}',
+    icon_bucket: 'Object storage', icon_api: 'API', icon_desktop: 'Applications', icon_logs: 'Logs', icon_tasks: 'Tasks', icon_traffic: 'Traffic', icon_automation: 'Automation', icon_plugins: 'Plugins', icon_tools: 'Tools', icon_search: 'Search', icon_tag: 'Tags', icon_flag: 'Feature flags', icon_team: 'Team', icon_mail: 'Messages', icon_routing: 'Routing', icon_identity: 'Identity',
+    importLegacy: 'Transfer settings',
+    identityUnknown: 'Could not determine the active federation. Open the default sidebar to sign in',
+    federationClouds: 'Clouds in federation {name}', cachedFederation: 'Cached information',
     dragCloud: 'Drag to reorder', reorderCloud: 'Reorder {name}. Use Alt+Arrow Up or Alt+Arrow Down', cloudMoved: '{name}: position {position} of {count}',
     icons: 'Icons',
     icon_folder: 'Folder', icon_terminal: 'Terminal', icon_server: 'Server', icon_database: 'Database', icon_briefcase: 'Workspace', icon_network: 'Network', icon_container: 'Container', icon_git: 'Git branches', icon_cpu: 'CPU', icon_security: 'Security', icon_globe: 'Internet', icon_key: 'Credentials', icon_rocket: 'Deployment', icon_settings: 'Settings', icon_disk: 'Storage', icon_archive: 'Archive', icon_monitoring: 'Monitoring', icon_alerts: 'Alerts', icon_testing: 'Testing', icon_bug: 'Debugging', icon_connection: 'Connection', icon_layers: 'Environments', icon_clock: 'Scheduled jobs', icon_code: 'Code',
@@ -21,6 +29,14 @@ const messages = {
     scanFailed: 'Could not read the tree',
   },
   ru: {
+    activeContext: 'Текущий контекст',
+    passportClouds: 'Облака аккаунта {name}', passportAccount: 'Аккаунт Яндекса', customizePassport: 'Настроить аккаунт Яндекса {name}',
+    switchPassport: 'Выберите аккаунт Яндекса в меню учетной записи для перехода к ресурсу',
+    customizeOrganization: 'Настроить организацию {name}', customizeFederation: 'Настроить федерацию {name}',
+    icon_bucket: 'Объектное хранилище', icon_api: 'API', icon_desktop: 'Приложения', icon_logs: 'Логи', icon_tasks: 'Задачи', icon_traffic: 'Трафик', icon_automation: 'Автоматизация', icon_plugins: 'Плагины', icon_tools: 'Инструменты', icon_search: 'Поиск', icon_tag: 'Метки', icon_flag: 'Флаги функций', icon_team: 'Команда', icon_mail: 'Сообщения', icon_routing: 'Маршрутизация', icon_identity: 'Идентификация',
+    importLegacy: 'Перенести настройки',
+    identityUnknown: 'Не удалось определить текущую федерацию. Откройте панель по умолчанию для входа',
+    federationClouds: 'Облака федерации {name}', cachedFederation: 'Информация из кеша',
     dragCloud: 'Перетащите для изменения порядка', reorderCloud: 'Порядок облака {name}. Используйте Alt+стрелка вверх или Alt+стрелка вниз', cloudMoved: '{name}: позиция {position} из {count}',
     icons: 'Иконки',
     icon_folder: 'Каталог', icon_terminal: 'Терминал', icon_server: 'Сервер', icon_database: 'База данных', icon_briefcase: 'Рабочая область', icon_network: 'Сеть', icon_container: 'Контейнер', icon_git: 'Ветки Git', icon_cpu: 'Процессор', icon_security: 'Безопасность', icon_globe: 'Интернет', icon_key: 'Учетные данные', icon_rocket: 'Развертывание', icon_settings: 'Настройки', icon_disk: 'Хранилище', icon_archive: 'Архив', icon_monitoring: 'Мониторинг', icon_alerts: 'Уведомления', icon_testing: 'Тестирование', icon_bug: 'Отладка', icon_connection: 'Соединение', icon_layers: 'Окружения', icon_clock: 'Расписание', icon_code: 'Код',

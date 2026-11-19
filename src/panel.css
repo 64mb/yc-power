@@ -16,6 +16,7 @@
 .ycp-item-icon { display: flex; justify-content: center; align-items: center; width:20px; height:20px; }
 .ycp-link { display: flex; align-items: center; color: var(--g-color-text-primary); text-decoration: none; min-width: 0; padding: 9px 0; overflow-wrap: anywhere; }
 .ycp-link:hover { color: var(--g-color-text-link-hover); }
+.ycp-link[role="button"] { cursor: pointer; }
 .ycp-link .g-text { font-family: var(--g-text-body-font-family); }
 .ycp-toggle { border-top: 1px solid var(--g-color-line-generic); padding: 4px; }
 .ycp-all-row { display: flex; align-items: center; height: 36px; padding: 0 8px; border-radius: 5px; cursor: pointer; color: var(--g-color-text-secondary); }
@@ -87,10 +88,25 @@
 .ycp-mine[data-reordering], .ycp-mine[data-reordering] * { cursor: grabbing; }
 
 .ycp-organization-group + .ycp-organization-group { border-top: 1px solid var(--g-color-line-generic); margin-top: 4px; padding-top: 4px; }
-.ycp-organization-row { display: grid; grid-template-columns: 28px 20px minmax(0, 1fr) auto; align-items: center; gap: 4px; min-height: 36px; padding: 2px 8px; }
+.ycp-organization-row { display: grid; grid-template-columns: 28px 20px minmax(0, 1fr) auto 28px; align-items: center; gap: 4px; min-height: 36px; padding: 2px 8px; cursor: pointer; border-radius: 6px; }
+.ycp-organization-row:hover { background: var(--g-color-base-simple-hover); }
 .ycp-organization-row > .g-text { overflow-wrap: anywhere; }
-.ycp-organization-row > .g-icon { justify-self: center; color: var(--g-color-text-secondary); }
-.ycp-organization-row > .g-text:last-child { padding-inline: 4px; }
+.ycp-organization-row > .g-text:nth-child(4) { padding-inline: 4px; }
+.ycp-federation-row { font-weight: 500; }
+.ycp-mine[data-federated] > .ycp-organization-group:not(.ycp-passport-organization),
+.ycp-federation > .ycp-organization-group { margin-inline-start: 12px; }
+.ycp-mine[data-federated] > .ycp-organization-group:not(.ycp-passport-organization) > .ycp-organization-row,
+.ycp-federation > .ycp-organization-group > .ycp-organization-row { margin-inline-start: -6px; }
+.ycp-passport-organization > .ycp-group { margin-inline-start: 12px; }
+.ycp-passport-account .ycp-passport-organization > .ycp-group { margin-inline-start: 0; }
+.ycp-group-icon { display: inline-flex; align-items: center; justify-content: center; }
+.ycp-group-action { opacity: 0; pointer-events: none; }
+.ycp-organization-row:hover .ycp-group-action,
+.ycp-organization-row:has(:focus-visible) .ycp-group-action,
+.ycp-heading-organization:hover .ycp-group-action,
+.ycp-heading-organization:has(:focus-visible) .ycp-group-action { opacity: 1; pointer-events: auto; }
+.ycp-heading-organization { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ycp-heading-organization .ycp-organization { min-width: 0; }
 [data-compact] .ycp-organization-row { min-height: 28px; }
 [data-compact] .ycp-organization-row > .g-button::before,
 [data-compact] .ycp-organization-row > .g-button::after { inset: 2px; }
@@ -100,3 +116,14 @@
 [data-compact] .ycp-refresh > .g-button::after { inset: 2px; }
 .ycp-status { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-compact] .ycp-status { padding: 0; }
+
+.ycp-federation[data-group-order-key] { position: relative; }
+.ycp-federation-row[data-group-reorderable] { cursor: grab; user-select: none; }
+.ycp-federation-row[data-group-reorderable]:focus-visible { outline: 2px solid var(--g-color-line-focus); outline-offset: -2px; }
+.ycp-federation[data-ycp-dragging] { opacity: 0.45; }
+.ycp-federation[data-ycp-drop]::after { content: ''; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 1px; background: var(--g-color-line-brand); pointer-events: none; z-index: 1; }
+.ycp-federation[data-ycp-drop="before"]::after { top: 0; }
+.ycp-federation[data-ycp-drop="after"]::after { bottom: 0; }
+
+.ycp-group-icon, .ycp-item-icon { position: relative; }
+.ycp-active-dot { position: absolute; left: -3px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--g-color-text-link) 80%, var(--ycp-console-background, var(--g-color-base-background))); box-shadow: 0 0 0 2px var(--ycp-console-background, var(--g-color-base-background)); }

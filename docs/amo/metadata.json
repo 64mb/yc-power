@@ -7,14 +7,14 @@
     "web-development"
   ],
   "description": {
-    "en-US": "Keep selected clouds in My Clouds and collapse the full list. Customize names, colors, and folder icons, reorder clouds, and use compact rows. Preferences stay in your browser and are separated by console address and organization. Supports Russian and English and follows the console theme.\n\nIndependent extension, not affiliated with Yandex Cloud. Does not manage cloud resources or send settings to a server.",
-    "ru": "Выберите нужные облака для списка \"Мои облака\", а общий список сверните. Настраивайте названия, цвета и иконки каталогов, меняйте порядок облаков и включайте компактный режим. Настройки хранятся в браузере отдельно для каждого адреса консоли и организации. Поддерживаются русский и английский языки и тема консоли.\n\nНезависимое расширение, не связанное с Yandex Cloud. Не управляет облачными ресурсами и не отправляет настройки на сервер."
+    "en-US": "Keep selected clouds in My Clouds and collapse the full list. Customize names, colors, and folder icons, reorder clouds, and use compact rows. Preferences stay in your browser and are separated by console address, federation, and organization. Supports Russian and English and follows the console theme.\n\nIndependent extension, not affiliated with Yandex Cloud. Does not manage cloud resources or send settings to a server.",
+    "ru": "Выберите нужные облака для списка \"Мои облака\", а общий список сверните. Настраивайте названия, цвета и иконки каталогов, меняйте порядок облаков и включайте компактный режим. Настройки хранятся в браузере отдельно для каждого адреса консоли, федерации и организации. Поддерживаются русский и английский языки и тема консоли.\n\nНезависимое расширение, не связанное с Yandex Cloud. Не управляет облачными ресурсами и не отправляет настройки на сервер."
   },
   "version": {
     "license": "all-rights-reserved",
     "release_notes": {
-      "en-US": "Fix Firefox compatibility with regional consoles by handling DOM iterators reliably. Add JSON settings export and import with two-space indentation. Make the settings interface more compact and improve checkbox alignment. Add a Chromium Manifest V3 build.",
-      "ru": "Исправлена работа Firefox с региональными консолями благодаря корректной обработке итераторов DOM. Добавлены экспорт и импорт настроек в JSON с отступами в два пробела. Интерфейс настроек стал компактнее, улучшено выравнивание флажков. Добавлена сборка Chromium с Manifest V3."
+      "en-US": "Group selected clouds by federation and personal account, keeping other groups available from the local cache. Customize federation and organization names and colors, reorder groups with the active group first, and optionally hide a single organization. Add current-context indicators, 40 icon presets, and a confirmed settings reset. Improve personal-account detection and preserve existing organization settings.",
+      "ru": "Облака сгруппированы по федерациям и личному аккаунту, другие группы доступны из локального кеша. Добавлены названия и цвета федераций и организаций, изменение порядка групп с активной группой первой и скрытие единственной организации. Добавлены индикаторы текущего контекста, 40 иконок и сброс настроек с подтверждением. Улучшено определение личного аккаунта с сохранением прежних настроек организаций."
     },
     "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
   }

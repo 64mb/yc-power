@@ -23,7 +23,7 @@ html,body{margin:0;width:100%;height:100%;min-width:0;font:13px Arial,sans-serif
 <script>
 const scenario=new URLSearchParams(location.search).get('scenario')||'small';
 const records=[];
-const opened=new Set(),loaded=new Set();let expansionClicks=0;let nativeSelectedCloud=scenario==='delayed-native-selection'?'cloud-alpha':null;
+const opened=new Set(),loaded=new Set();let expansionClicks=0;let nativeSelectedCloud=['delayed-native-selection','federations'].includes(scenario)?'cloud-alpha':null;
 const org=(id,name)=>records.push({type:'organization',id,name});
 const cloud=(id,name)=>records.push({type:'cloud',id,name});
 const folder=(id,name,cloudId)=>records.push({type:'folder',id,name,cloudId});
@@ -37,7 +37,7 @@ else{
  if((scenario==='delayed-controls'||scenario==='retry-defers'))for(let n=0;n<30;n++)cloud('cloud-extra-'+n,'Extra cloud '+n);
  if(scenario==='cloud-order-scroll')for(let n=0;n<24;n++)folder('folder-extra-'+n,'Extra folder '+n,'cloud-alpha');
  cloud('cloud-analytics','Analytics');folder('folder-analytics','Analytics folder','cloud-analytics');
- if(scenario.startsWith('multi'))org('org-beta','Beta organization');
+ if(scenario.startsWith('multi')||scenario==='passport-real')org('org-beta','Beta organization');
  cloud('cloud-beta','Beta core');folder('folder-beta','Beta folder','cloud-beta');
  if(scenario==='multi-grouped'){org('org-empty','Empty organization');cloud('cloud-empty','Unselected cloud')}
 }
@@ -53,7 +53,7 @@ function renderRows(){
   if(row.type==='cloud'&&row.id===nativeSelectedCloud)item.setAttribute('aria-selected','true');
   const a=document.createElement('a');a.className='cloud-tree-list-item__title';a.title=row.name;a.textContent=row.name;a.href=row.type==='organization'?'https://example.com/organizations/'+row.id:row.type==='cloud'?'/clouds/'+row.id:'/clouds/'+row.cloudId+'/'+row.id;
   if(scenario==='multi-regional'&&row.type==='cloud'&&row.id==='cloud-beta')a.href='/auth/move?targetRegionId=region-beta&targetService=console&targetPath=%2Fcloud%2Fcloud-beta';
-  if((scenario.startsWith('delayed')||scenario==='multi-regional'&&row.id==='cloud-beta')&&row.type==='cloud'){
+  if((scenario.startsWith('delayed')||scenario==='federations'||scenario==='multi-regional'&&row.id==='cloud-beta')&&row.type==='cloud'){
    const button=document.createElement('button');button.type='button';button.className='cloud-tree-list-item__expand-button';button.setAttribute('aria-expanded',String(opened.has(row.id)));
    const icon=document.createElement('span');icon.className='cloud-tree-list-item__expand-icon'+(opened.has(row.id)?' cloud-tree-list-item__expand-icon_expanded':'');icon.textContent='›';button.append(icon);
    button.onclick=()=>{expansionClicks++;if(opened.has(row.id)){opened.delete(row.id);renderRows();return}opened.add(row.id);item.setAttribute('aria-busy','true');setTimeout(()=>{loaded.add(row.id);renderRows()},750)};
@@ -65,8 +65,31 @@ function renderRows(){
 list.addEventListener('scroll',()=>requestAnimationFrame(renderRows));renderRows();
 const saved=JSON.parse(sessionStorage.getItem('fixture:'+scenario)||'null');const memory=saved||{};const listeners=[];
 if(!saved&&(scenario.startsWith('delayed')||scenario==='multi-saved'||scenario==='expand-state'||scenario==='folder-icons'||scenario.startsWith('cloud-order')||(scenario.startsWith('retry')||scenario.startsWith('startup-'))||scenario==='folder-order'||scenario==='empty-cloud'||scenario==='becomes-empty'))memory['yc-power:'+location.origin+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:320,custom:{},showAllModern:false};
-window.browser={storage:{local:{get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
-history.replaceState(null,'','/clouds');
+window.browser={storage:{local:{remove:async keys=>{const changes={};for(const key of keys){changes[key]={oldValue:memory[key],newValue:undefined};delete memory[key]}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))},get:async key=>key===null?structuredClone(memory):{[key]:structuredClone(memory[key])},set:async values=>{const changes={};for(const [key,value]of Object.entries(values)){changes[key]={oldValue:memory[key],newValue:structuredClone(value)};memory[key]=structuredClone(value)}sessionStorage.setItem('fixture:'+scenario,JSON.stringify(memory));listeners.forEach(fn=>fn(changes,'local'))}},onChanged:{addListener:fn=>listeners.push(fn)}}};
+history.replaceState(null,'',scenario==='federations'?'/clouds/cloud-alpha':'/clouds');
+if(scenario==='federations'){
+ const bootstrap=document.createElement('script');bootstrap.id='fixture-identity';bootstrap.textContent='window.__DATA__ = '+JSON.stringify({user:{isFederated:true,federationId:'federation-alpha',federationName:'Alpha federation'}})+';';document.head.append(bootstrap);
+ if(!saved)for(const [id,name,label,color,folderLabel]of [['federation-alpha','Alpha federation','Active custom cloud','#112233','Active custom folder'],['federation-beta','Beta cached federation','Cached custom cloud','#445566','Cached custom folder']]){
+  const prefix='yc-power:'+location.origin+':federation:id:'+id;
+  memory[prefix+':profile']={name};
+  memory[prefix+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,width:360,expandedClouds:['cloud-alpha'],custom:{'cloud:cloud-alpha':{label,color},'folder:folder-alpha':{label:folderLabel,color,icon:'terminal'}}};
+  memory[prefix+':catalog']=[{type:'cloud',id:'cloud-alpha',name:id==='federation-alpha'?'Old active cloud':'Cached original cloud',href:'/clouds/cloud-alpha',organizationId:'org-alpha',organizationName:'Alpha organization',folders:[{type:'folder',id:'folder-alpha',name:id==='federation-alpha'?'Old active folder':'Cached original folder',href:'/clouds/cloud-alpha/folder-alpha',cloudId:'cloud-alpha'}]}];
+ }
+}
+if(scenario==='passport-real'){
+ const bootstrap=document.createElement('script');bootstrap.textContent='window.__DATA__ = {"user":{"id":"synthetic-personal-user","uid":"1234567890","displayName":"Synthetic personal account"}};';document.head.append(bootstrap);
+ if(!saved){
+  const prefix='yc-power:'+location.origin;
+  memory[prefix+':catalog']=[{type:'cloud',id:'stale-cloud',name:'Stale federation cloud',href:'/clouds/stale-cloud',organizationId:'stale-org',organizationName:'Stale federation organization',folders:[]}];
+  memory[prefix+':organization:id:stale-org']={mine:['stale-cloud'],initialized:true,custom:{}};
+  memory[prefix+':organization:id:org-alpha']={mine:['cloud-alpha'],initialized:true,custom:{'cloud:cloud-alpha':{label:'Personal selected'}}};
+  memory[prefix+':organization:id:org-beta']={mine:['cloud-beta'],initialized:true,custom:{'cloud:cloud-beta':{label:'Another personal selected'}}};
+  memory[prefix+':layout']={scopeKey:prefix+':organization:id:stale-org',width:360};
+  memory[prefix+':federation:id:synthetic-fed:catalog']=[{type:'cloud',id:'federation-cloud',name:'Cached federation cloud',href:'/clouds/federation-cloud',organizationId:'federation-org',organizationName:'Federation organization',folders:[]}];
+  memory[prefix+':federation:id:synthetic-fed:profile']={name:'Synthetic federation'};
+  memory[prefix+':federation:id:synthetic-fed:organization:id:federation-org']={mine:['federation-cloud'],initialized:true,custom:{}};
+ }
+}
 if(!saved&&scenario==='delayed-native-selection'){
  memory.cloudOnlyHosts=[location.origin];
  memory['yc-power:'+location.origin+':organization:id:org-alpha'].mine=['cloud-alpha','cloud-beta'];
@@ -96,7 +119,10 @@ if(!saved&&scenario==='folder-order')memory['yc-power:'+location.origin+':organi
 if(!saved&&['empty-cloud','becomes-empty'].includes(scenario))memory['yc-power:'+location.origin+':organization:id:org-alpha'].expandedClouds=['cloud-alpha'];
 const widths=[];
 new MutationObserver(()=>{const host=document.querySelector('[data-ycp-host]');if(host)widths.push(host.parentElement.getBoundingClientRect().width)}).observe(document.querySelector('.console-dashboard-layout__aside'),{childList:true,subtree:true,attributes:true});
-window.fixture={scenario,records,memory,renderRows,widths,scanStarts:[],errors:[],get expansionClicks(){return expansionClicks}};
+window.fixture={scenario,records,memory,renderRows,widths,seenStaleCloud:false,scanStarts:[],errors:[],get expansionClicks(){return expansionClicks}};
+if(scenario==='passport-real'){
+ const observe=()=>{const shadow=document.querySelector('[data-ycp-host]')?.shadowRoot;if(!shadow||shadow.observed)return;shadow.observed=true;new MutationObserver(()=>{if(shadow.querySelector('[data-cloud-id="stale-cloud"]'))fixture.seenStaleCloud=true}).observe(shadow,{childList:true,subtree:true})};new MutationObserver(observe).observe(document.body,{childList:true,subtree:true});observe();
+}
 if(scenario.startsWith('retry')||scenario.startsWith('startup-')){
  const ReadinessObserver=MutationObserver,roots=new WeakSet();
  const observeStatus=()=>{const root=document.querySelector('[data-ycp-host]')?.shadowRoot;if(!root||roots.has(root))return;roots.add(root);let loading=false,error=false;const record=()=>{const text=root.querySelector('.ycp-status')?.textContent||'',nextLoading=text.includes('Loading cloud list'),nextError=text.includes('Could not read');if(nextLoading&&!loading)fixture.scanStarts.push(performance.now());if(nextError&&!error)fixture.errors.push(performance.now());loading=nextLoading;error=nextError};new ReadinessObserver(record).observe(root,{childList:true,subtree:true,characterData:true});record()};

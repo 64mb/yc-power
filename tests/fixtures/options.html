@@ -8,11 +8,15 @@
 <script>
 const scenario = new URLSearchParams(location.search).get('scenario');
 const memory = JSON.parse(sessionStorage.getItem('options:' + scenario) || '{}');
-window.fixture = {memory, requests: [], writes: []};
+window.fixture = {memory, requests: [], writes: [], revocations: []};
 window.browser = {
     i18n: {getUILanguage: () => 'en'},
     storage: {local: {
         get: async keys => typeof keys === 'string' ? {[keys]: structuredClone(memory[keys])} : structuredClone(memory),
+        remove: async keys => {
+            for (const key of keys) delete memory[key];
+            sessionStorage.setItem('options:' + scenario, JSON.stringify(memory));
+        },
         set: async values => {
             fixture.writes.push(structuredClone(values));
             Object.assign(memory, structuredClone(values));
@@ -21,7 +25,7 @@ window.browser = {
     }},
     permissions: {
         request: async request => { fixture.requests.push(structuredClone(request)); return scenario !== 'options-denied'; },
-        remove: async () => true,
+        remove: async request => { fixture.revocations.push(structuredClone(request)); return true; },
     },
 };
 </script>

@@ -1,11 +1,11 @@
 {
   "name": "yc-power",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
     "build:firefox": "node build.mjs && node package-firefox.mjs",
     "build:chromium": "node build.mjs --chromium && node build-chromium.mjs",
-    "test:shared": "node --test tests/core.test.cjs tests/i18n.test.cjs tests/organization.test.cjs tests/preferences.test.cjs tests/settings-transfer.test.cjs",
+    "test:shared": "node --test tests/core.test.cjs tests/federation.test.cjs tests/i18n.test.cjs tests/organization.test.cjs tests/preferences.test.cjs tests/settings-transfer.test.cjs",
     "test:firefox": "npm run test:shared && node --test tests/firefox-background.test.cjs",
     "test:chromium": "npm run test:shared && node --test tests/chromium-background.test.cjs",
     "smoke:firefox": "node tests/run-browser-tests.mjs firefox",

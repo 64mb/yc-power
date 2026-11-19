@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Button, Card, Icon, Checkbox, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
+import {Button, Card, Dialog, Icon, Checkbox, Text, TextInput, ThemeProvider} from '@gravity-ui/uikit';
 import {Plus, TrashBin, FloppyDisk, FolderTree, Clouds, ArrowDownToLine, ArrowUpFromLine} from '@gravity-ui/icons';
 import '@gravity-ui/uikit/styles/styles.css';
 import './options.css';
@@ -28,13 +28,16 @@ function normalizeHost(value) {
 function Settings() {
     const [hosts, setHosts] = useState(DEFAULT_HOSTS.map((host) => ({host, cloudOnly: false})));
     const [compactDensity, setCompactDensity] = useState(false);
+    const [hideSingleOrganization, setHideSingleOrganization] = useState(false);
+    const [showPersonalOrganizations, setShowPersonalOrganizations] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
     const [imported, setImported] = useState(null);
+    const [resetOpen, setResetOpen] = useState(false);
     const importInput = useRef(null);
     useEffect(() => {
-        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts']).then((stored) => {
+        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts', 'hideSingleOrganization', 'showPersonalOrganizations']).then((stored) => {
             const disabledHosts = new Set((Array.isArray(stored.cloudOnlyHosts) ? stored.cloudOnlyHosts : []).flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }));
@@ -44,6 +47,8 @@ function Settings() {
                 return {host, cloudOnly};
             }));
             setCompactDensity(stored.compactDensity === true);
+            setHideSingleOrganization(stored.hideSingleOrganization === true);
+            setShowPersonalOrganizations(stored.showPersonalOrganizations === true);
             setLoading(false);
         }).catch(() => {
             setStatus({theme: 'danger', message: t.loadFailed});
@@ -68,8 +73,51 @@ function Settings() {
             setImported(settings);
             setHosts(settings.domainHosts.map(host => ({host, cloudOnly: settings.cloudOnlyHosts.includes(host)})));
             setCompactDensity(settings.compactDensity);
+            setHideSingleOrganization(settings.hideSingleOrganization === true);
+            setShowPersonalOrganizations(settings.showPersonalOrganizations === true);
             setStatus({theme: 'success', message: t.importReady});
         } catch { setStatus({theme: 'danger', message: t.importFailed}); }
+    }
+    async function resetSettings() {
+        if (saving) return;
+        setSaving(true);
+        setStatus(null);
+        try {
+            const stored = await browser.storage.local.get(null);
+            const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : [];
+            const defaults = {
+                _ycPowerReset: crypto.randomUUID(),
+                domainHosts: DEFAULT_HOSTS,
+                cloudOnlyHosts: [],
+                compactDensity: false,
+                hideSingleOrganization: false,
+                showPersonalOrganizations: false,
+            };
+            // publish the reset marker before removing data so content scripts discard pending writes
+            await browser.storage.local.set(defaults);
+            const current = await browser.storage.local.get(null);
+            const removedKeys = [...new Set([...Object.keys(stored), ...Object.keys(current)])]
+                .filter((key) => !Object.hasOwn(defaults, key));
+            if (removedKeys.length) await browser.storage.local.remove(removedKeys);
+            setHosts(DEFAULT_HOSTS.map((host) => ({host, cloudOnly: false})));
+            setCompactDensity(false);
+            setHideSingleOrganization(false);
+            setShowPersonalOrganizations(false);
+            setImported(null);
+            if (importInput.current) importInput.current.value = '';
+            const manifest = browser.runtime?.getManifest?.() || {};
+            const requiredOrigins = [...(manifest.host_permissions || []), ...(manifest.permissions || [])];
+            const removedHosts = [...new Set(previous.flatMap((host) => {
+                try { return [normalizeHost(host)]; } catch { return []; }
+            }))].filter((host) => !DEFAULT_HOSTS.includes(host) && !requiredOrigins.includes(host + '/*'));
+            if (removedHosts.length) await browser.permissions.remove({origins: removedHosts.map((host) => host + '/*')});
+            setStatus({theme: 'success', message: t.resetDone});
+        } catch {
+            setStatus({theme: 'danger', message: t.resetFailed});
+        } finally {
+            setResetOpen(false);
+            setSaving(false);
+        }
     }
     async function save(event) {
         event.preventDefault();
@@ -91,7 +139,7 @@ function Settings() {
             }
             const stored = await browser.storage.local.get('domainHosts');
             const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
-            await browser.storage.local.set({...imported, domainHosts: next, compactDensity, cloudOnlyHosts});
+            await browser.storage.local.set({...imported, domainHosts: next, compactDensity, cloudOnlyHosts, hideSingleOrganization, showPersonalOrganizations});
             setImported(null);
             const removed = previous.flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
@@ -135,15 +183,31 @@ function Settings() {
                     <Checkbox size="m" checked={compactDensity} onUpdate={setCompactDensity} disabled={loading || saving}
                         controlProps={{'aria-describedby': 'compact-density-hint'}}>{t.compactDensity}</Checkbox>
                     <Text as="p" variant="body-1" color="secondary" id="compact-density-hint">{t.compactDensityHint}</Text>
+                    <Checkbox size="m" checked={hideSingleOrganization} onUpdate={setHideSingleOrganization} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'hide-single-organization-hint'}}>{t.hideSingleOrganization}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="hide-single-organization-hint">{t.hideSingleOrganizationHint}</Text>
+                    <Checkbox size="m" checked={showPersonalOrganizations} onUpdate={setShowPersonalOrganizations} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'show-personal-organizations-hint'}}>{t.showPersonalOrganizations}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="show-personal-organizations-hint">{t.showPersonalOrganizationsHint}</Text>
                 </section>
                 <input ref={importInput} type="file" accept="application/json,.json" hidden onChange={importSettings}/>
                 <div className="settings-transfer">
                     <Button view="outlined" disabled={loading || saving} onClick={exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
                     <Button view="outlined" disabled={loading || saving} onClick={() => importInput.current.click()}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
                 </div>
+                <Button className="settings-reset" view="outlined-danger" disabled={loading || saving} onClick={() => setResetOpen(true)}><Icon data={TrashBin} size={16}/>{t.resetSettings}</Button>
                 <div className="settings-actions">{status && <Text className="settings-status" variant="caption-1" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>
+        <Dialog open={resetOpen} onClose={() => { if (!saving) setResetOpen(false); }} initialFocus="cancel"
+            aria-labelledby="reset-settings-title" aria-describedby="reset-settings-description"
+            disableEscapeKeyDown={saving} disableOutsideClick={saving} hasCloseButton={!saving}>
+            <Dialog.Header caption={t.resetSettings} id="reset-settings-title"/>
+            <Dialog.Body><Text as="p" id="reset-settings-description">{t.resetConfirm}</Text></Dialog.Body>
+            <Dialog.Footer preset="danger" textButtonCancel={t.cancel} textButtonApply={t.resetSettings}
+                onClickButtonCancel={() => setResetOpen(false)} onClickButtonApply={resetSettings}
+                loading={saving} propsButtonCancel={{disabled: saving}} propsButtonApply={{disabled: saving}}/>
+        </Dialog>
         <Text as="p" variant="body-1" color="secondary">{t.privacy}</Text>
     </main>;
 }

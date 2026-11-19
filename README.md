@@ -4,19 +4,26 @@
   <p>A focused cloud navigation panel for the Yandex Cloud console</p>
 </div>
 
-YC Power brings your frequently used clouds and folders together in a compact sidebar for Firefox, Zen, and Chromium. Your selection and customizations stay in local browser storage, separately for each organization and console origin.
+YC Power brings your frequently used clouds and folders together in a compact sidebar for Firefox, Zen, and Chromium. Your selection and customizations stay in local browser storage, separately for each federation, organization, and console origin.
 
 ![YC Power workspace with a selection of clouds and folders](docs/screenshots/workspace.png)
 
 ## Make the console yours
 
 - Add or remove clouds from **My clouds**; refresh clouds and their folders together from the header
+- Customize organization and federation labels and icon colors, or restore their original appearance
+- Reorder federation and personal-account groups by dragging or Alt+Up/Down; the active group always appears first
+- Identify the current federation, organization, and cloud by a small dot beside their icons
+- Optionally hide the organization level when a federation contains one organization
+- Choose whether to show cached Yandex account organizations alongside federations or keep the account modes separate
+- Keep federation groups together using cached clouds from other federations, refresh only the active federation, and sign in when opening a cached resource
+- Visit a federation and select its clouds once to cache its group; use the explicit copy button to associate previous settings with the current federation
 - See selected clouds from multiple organizations together in collapsible groups; existing selections and customizations stay separate for each organization
 - Display the previous local catalog immediately while refreshing it in the background; detect console tree creation immediately and check readiness every 50 ms for up to five seconds
 - Open **All clouds** to use the original console tree and add clouds from it, or return to the default sidebar, including during loading
 - Background collection pauses while you use the original tree and resumes when you return to My clouds and close the full list
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
-- Choose one of 24 Gravity UI icons for each folder; clouds keep their original icon when folders are enabled, and support icon presets in clouds-only mode
+- Choose one of 40 Gravity UI icons for each folder; clouds keep their original icon when folders are enabled, and support icon presets in clouds-only mode
 - Set individual console addresses to clouds-only mode to hide folders and skip background folder loading
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
 - Drag clouds to reorder My clouds, or use Alt+Up/Down; the order is saved for each organization
@@ -28,6 +35,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Start with the current cloud automatically selected when it can be identified on first use
 - Enable compact mode in extension settings to reduce row height and spacing
 - Export settings as two-space-indented JSON and import them across browsers; imported settings are staged until you select **Save**, when the browser requests any required permissions
+- Reset all settings from the extension settings page after confirmation
 - Follow the console's Gravity theme and font, including light and dark themes
 - Use Russian or English according to the console language; extension settings follow the browser language, with English as the fallback
 
