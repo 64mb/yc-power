@@ -29,7 +29,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   const organizationGroupKey = (id, federation = federationId) => federation ? Federation.identityKey(federation, id || '') : id || '';
   const canScanIdentity = () => {
     const current = readIdentity();
-    if ((current?.id || null) !== federationId || Boolean(current) !== Boolean(identity)) return false;
+    if ((current?.id || null) !== federationId || Boolean(current) !== Boolean(identity) || current?.subjectId !== identity?.subjectId) return false;
     return Boolean(identity) || !Object.keys(preferences).some(savedKey => {
       const scope = Federation.parseKey(savedKey);
       return scope?.origin === location.origin && ((scope.federationId !== null && scope.kind === 'catalog') || scope.kind === 'passport-catalog');
@@ -56,6 +56,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   const personalMode = () => identity !== null && federationId === null;
   function activeCatalog() {
     if (!identity && !canScanIdentity()) return [];
+    const passportSubject = preferences[Federation.passportProfileKey(location.origin)]?.subjectId;
+    if (personalMode() && identity.subjectId && passportSubject !== identity.subjectId) return [];
     return Core.catalogCache(preferences[personalMode() ? Federation.passportCatalogKey(location.origin) : catalogKey], location.origin);
   }
   const expanded = new Set();
@@ -312,7 +314,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         toggleGroup(groupKey);
       }}><Icon data={collapsedOrganizations.has(groupKey) ? ChevronRight : ChevronDown} size={16}/></Button>
       <span className="ycp-group-icon" style={{color: groupColor(profile?.appearance)}}><Icon data={id === null ? Person : PersonsLock} size={16}/><ActiveDot active={!cached && identity !== null}/></span>
-      <Text variant="body-1" data-ycp-tooltip={cached ? `${originalName}\n${t(id === null ? 'switchPassport' : 'cachedFederation')}` : originalName}>{name}</Text>
+      <Text variant="body-1" data-ycp-tooltip={cached ? `${originalName}\n${t('cachedFederation')}` : originalName}>{name}</Text>
       {(id === null || hideOrganizationLevel(id)) ? <Text className="ycp-group-count" variant="caption-2" color="secondary">{cloudCount}</Text> : <span/>}
       <GroupAction type={id === null ? "passport" : "federation"} id={id} name={originalName}/>
     </div>;
@@ -469,10 +471,16 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   function saveFederationProfile() {
     if (stopped || !identity) return;
     const profileKey = identity.id === null ? Federation.passportProfileKey(location.origin) : Federation.profileKey(location.origin, identity.id);
-    const profile = {...preferences[profileKey], name: identity.name || (identity.id === null ? t('passportAccount') : identity.id)};
-    if (preferences[profileKey]?.name === profile.name) return;
+    const profile = {...preferences[profileKey], name: identity.name || (identity.id === null ? t('passportAccount') : identity.id), ...(identity.subjectId ? {subjectId: identity.subjectId} : {})};
+    if (preferences[profileKey]?.name === profile.name && preferences[profileKey]?.subjectId === profile.subjectId) return;
+    const saved = {[profileKey]: profile};
+    if (identity.subjectId && preferences[profileKey]?.subjectId !== identity.subjectId) {
+      const passportKey = Federation.passportCatalogKey(location.origin);
+      preferences[passportKey] = [];
+      saved[passportKey] = [];
+    }
     preferences[profileKey] = profile;
-    storage?.set({[profileKey]: profile}).catch(() => {});
+    storage?.set(saved).catch(() => {});
   }
   function resumeDestination() {
     if (!identity || location.pathname.startsWith('/federations/')) return;
@@ -482,6 +490,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       const destination = JSON.parse(saved);
       if (!Number.isFinite(destination.expires) || destination.expires < Date.now()) { sessionStorage.removeItem('yc-power:destination'); return; }
       if (destination.federationId !== identity.id) return;
+      if (identity.id === null && destination.subjectId && destination.subjectId !== identity.subjectId) return;
       const route = Core.route(destination.href, location.origin);
       sessionStorage.removeItem('yc-power:destination');
       if (route && route.href !== location.href) location.replace(route.href);
@@ -491,7 +500,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function syncIdentity() {
     const next = readIdentity();
-    if ((next?.id || null) === federationId && Boolean(next) === Boolean(identity)) {
+    if ((next?.id || null) === federationId && Boolean(next) === Boolean(identity) && next?.subjectId === identity?.subjectId) {
       const renamed = next?.name !== identity?.name;
       identity = next; saveFederationProfile(); if (renamed) render(); return;
     }
@@ -957,7 +966,9 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   function safeHref(item) {
     const route = Core.route(item.href, location.origin);
     if (route?.id !== item.id || route.type !== item.type) return undefined;
-    return activeCloud(item) ? route.href : cloudFederation(item) === null ? undefined : Federation.loginHref(location.origin, cloudFederation(item));
+    if (activeCloud(item)) return route.href;
+    if (cloudFederation(item) !== null) return Federation.loginHref(location.origin, cloudFederation(item));
+    return Federation.passportLoginHref(location.origin, preferences[Federation.passportProfileKey(location.origin)]?.subjectId, route.href);
   }
   async function navigateCached(event, item) {
     if (stopped) return;
@@ -966,16 +977,13 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     event.preventDefault();
     const href = safeHref(item), route = Core.route(item.href, location.origin);
     const passport = cloudFederation(item) === null;
-    if ((!href && !passport) || !route || route.id !== item.id || route.type !== item.type) return;
+    if (!href || !route || route.id !== item.id || route.type !== item.type) return;
     try {
-      sessionStorage.setItem('yc-power:destination', JSON.stringify({federationId: cloudFederation(item), href: route.href, expires: Date.now() + 300000}));
+      const subjectId = passport ? preferences[Federation.passportProfileKey(location.origin)]?.subjectId : undefined;
+      sessionStorage.setItem('yc-power:destination', JSON.stringify({federationId: cloudFederation(item), ...(subjectId ? {subjectId} : {}), href: route.href, expires: Date.now() + 300000}));
       await flushPendingPreferences();
       if (stopped) return;
-      if (passport) {
-        statusKey = 'switchPassport';
-        document.querySelector('[aria-label="Учетная запись"], [aria-label="Account"], [aria-label="User account"], [aria-label="Аккаунт"]')?.click();
-        render();
-      } else location.assign(href);
+      location.assign(href);
     } catch { statusKey = 'saveFailed'; render(); }
   }
   function Item({item, parent, draggable = false}) {
@@ -998,9 +1006,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       }}><Icon data={!empty && itemExpanded(item) ? ChevronDown : ChevronRight} size={16}/></Button> : <span className="ycp-disclosure-space"/>)}
       {item.type === 'folder' && <span className="ycp-indent"/>}
       <span className="ycp-item-icon" data-ycp-tooltip={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item, parent)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item, parent)]} size={16}/><ActiveDot active={item.type === 'cloud' && activeCloud(item) && currentCloud()?.id === item.id}/></span>
-      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} role={!activeCloud(item) && cloudFederation(item) === null ? 'button' : undefined} tabIndex={!activeCloud(item) && cloudFederation(item) === null ? 0 : undefined} onKeyDown={event => {
-        if (!activeCloud(item) && cloudFederation(item) === null && ['Enter', ' '].includes(event.key)) { event.preventDefault(); void navigateCached({button: 0, preventDefault() {}}, item); }
-      }} onClick={event => navigateCached(event, item)} data-ycp-tooltip={`${item.name}\n${item.id}${activeCloud(item) ? '' : `\n${t(cloudFederation(item) === null ? 'switchPassport' : 'cachedFederation')}`}`} aria-current={current ? 'page' : undefined}>
+      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} onClick={event => navigateCached(event, item)} data-ycp-tooltip={`${item.name}\n${item.id}${activeCloud(item) ? '' : `\n${t('cachedFederation')}`}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
       {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} data-ycp-tooltip={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={cloudSettings(item).mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
@@ -1046,6 +1052,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     const editIcons = edit?.type === 'cloud' ? cloudIcons : folderIcons;
     const groups = grouped ? organizationGroups() : [{id: organizationGroupKey(organization?.id), name: organization?.name, clouds: mine}];
     const cached = cachedGroups();
+    const hideFederationLevel = !foldersEnabled && Boolean(federationId) && !cached.length;
     const passportGroups = personalMode();
     const hideActiveOrganization = hideOrganizationLevel(federationId);
     const folderNames = new Intl.Collator(consoleLanguage(), {sensitivity: 'base', numeric: true});
@@ -1069,12 +1076,12 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
         {(busy || statusKey !== 'cloudCount') && <div className="ycp-status" role="status"><Text variant="caption-2" color="secondary">{t(statusKey, statusArgs)}</Text></div>}
 
         <div className="ycp-reorder-status" role="status" aria-live="polite">{reorderAnnouncement}</div>
-        <div className="ycp-mine" data-federated={Boolean(federationId) || undefined}>
+        <div className="ycp-mine" data-federated={Boolean(federationId) && !hideFederationLevel || undefined} data-federation-hidden={hideFederationLevel || undefined}>
           {legacyPreferences() && <div className="ycp-note"><Button view="outlined" size="s" onClick={importLegacyPreferences}><Icon data={PersonsLock} size={16}/>{t('importLegacy')}</Button></div>}
           {!mine.length && !cached.length && <div className="ycp-note">{t('empty')}</div>}
-          {federationId && <FederationHeading id={federationId} cloudCount={mine.length}/>}
+          {federationId && !hideFederationLevel && <FederationHeading id={federationId} cloudCount={mine.length}/>}
           <PassportLevel enabled={personalMode() && showPersonalOrganizations} cloudCount={mine.length}>
-          {(!federationId || !collapsedOrganizations.has(federationGroupKey(federationId))) && groups.map(group => <div key={group.id} className={passportGroups ? 'ycp-organization-group ycp-passport-organization' : grouped || federationId ? 'ycp-organization-group' : undefined} data-organization-id={grouped || passportGroups ? group.id : undefined} data-organization-hidden={hideActiveOrganization || undefined}>
+          {(hideFederationLevel || !federationId || !collapsedOrganizations.has(federationGroupKey(federationId))) && groups.map(group => <div key={group.id} className={passportGroups ? 'ycp-organization-group ycp-passport-organization' : grouped || federationId ? 'ycp-organization-group' : undefined} data-organization-id={grouped || passportGroups ? group.id : undefined} data-organization-hidden={hideActiveOrganization || undefined}>
             {!hideActiveOrganization && (grouped || passportGroups || (federationId && group.name)) && <OrganizationHeading group={group}/>}
             {(hideActiveOrganization || !(grouped || federationId || passportGroups) || !collapsedOrganizations.has(group.id)) && group.clouds.map(cloud => {
             const folders = [...cloud.folders].sort((a, b) => folderNames.compare(display(a, cloud), display(b, cloud)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

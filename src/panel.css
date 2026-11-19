@@ -99,6 +99,7 @@
 .ycp-federation > .ycp-organization-group > .ycp-organization-row { margin-inline-start: -6px; }
 .ycp-passport-organization > .ycp-group { margin-inline-start: 12px; }
 .ycp-passport-account .ycp-passport-organization > .ycp-group { margin-inline-start: 0; }
+.ycp-mine[data-federation-hidden] > .ycp-organization-group:not([data-organization-hidden]) > .ycp-group { margin-inline-start: 12px; }
 .ycp-group-icon { display: inline-flex; align-items: center; justify-content: center; }
 .ycp-group-action { opacity: 0; pointer-events: none; }
 .ycp-organization-row:hover .ycp-group-action,
@@ -126,4 +127,5 @@
 .ycp-federation[data-ycp-drop="after"]::after { bottom: 0; }
 
 .ycp-group-icon, .ycp-item-icon { position: relative; }
+.ycp-row, .ycp-organization-row, .ycp-all-row { user-select: none; }
 .ycp-active-dot { position: absolute; left: -3px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--g-color-text-link) 80%, var(--ycp-console-background, var(--g-color-base-background))); box-shadow: 0 0 0 2px var(--ycp-console-background, var(--g-color-base-background)); }

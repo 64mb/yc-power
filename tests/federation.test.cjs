@@ -96,7 +96,7 @@ test('passport snapshots remain distinct from legacy and federation catalogs', (
 
 test('real passport bootstrap omits federation flags and uses a numeric uid', () => {
   const passport = user => F.identityFromScripts(['window.__DATA__ = ' + JSON.stringify({user}) + ';']);
-  assert.deepEqual(passport({id: 'synthetic-user', uid: '1234567890'}), {id: null, name: null});
+  assert.deepEqual(passport({id: 'synthetic-user', uid: '1234567890'}), {id: null, name: null, subjectId: 'synthetic-user'});
   for (const uid of ['', '0', 'invalid', '123\n', '9'.repeat(33)]) assert.equal(passport({id: 'synthetic-user', uid}), null);
   assert.equal(passport({uid: '1234567890'}), null);
   assert.equal(passport({id: 'synthetic-user', yandexuid: '1234567890'}), null);
@@ -107,7 +107,20 @@ test('real passport bootstrap omits federation flags and uses a numeric uid', ()
 
 test('passport heading uses the account display name without exposing its uid', () => {
   const identity = F.identityFromScripts(['window.__DATA__ = {"user":{"id":"synthetic-user","uid":"1234567890","displayName":"Synthetic account","login":"synthetic-login"}};']);
-  assert.deepEqual(identity, {id: null, name: 'Synthetic account'});
+  assert.deepEqual(identity, {id: null, name: 'Synthetic account', subjectId: 'synthetic-user'});
   assert.equal(JSON.stringify(identity).includes('1234567890'), false);
-  assert.deepEqual(F.identityFromScripts(['window.__DATA__ = {"user":{"id":"synthetic-user","uid":"1234567890","login":"synthetic-login"}};']), {id: null, name: 'synthetic-login'});
+  assert.deepEqual(F.identityFromScripts(['window.__DATA__ = {"user":{"id":"synthetic-user","uid":"1234567890","login":"synthetic-login"}};']), {id: null, name: 'synthetic-login', subjectId: 'synthetic-user'});
+});
+
+test('personal login links select a safe subject and preserve the relative destination', () => {
+  const path = '/folders/example-folder?tab=overview#details';
+  assert.equal(F.passportLoginHref(origin, 'synthetic-subject', path), `${origin}/auth/switch?sub=synthetic-subject&redirectUrl=${encodeURIComponent(path)}`);
+  for (const subject of [null, undefined]) assert.equal(F.passportLoginHref(origin, subject, path), `${origin}/auth/switch?redirectUrl=${encodeURIComponent(path)}`);
+  for (const subject of ['', '../bad', 'bad.subject', 'bad\n', 'a'.repeat(257), 7]) assert.equal(F.passportLoginHref(origin, subject, path), null);
+  for (const path of ['//other.example/path', 'https://other.example/path', '/\\other.example/path', '/folders/example\n', 'relative', null]) assert.equal(F.passportLoginHref(origin, 'synthetic-subject', path), null);
+  assert.equal(F.passportLoginHref(`${origin}/`, 'synthetic-subject', path), null);
+  const identity = id => F.identityFromScripts([`window.__DATA__ = ${JSON.stringify({user: {isFederated: false, id}})};`]);
+  assert.equal(identity('synthetic-subject').subjectId, 'synthetic-subject');
+  for (const id of ['', '../bad', 'bad.subject', 'a'.repeat(257), 7]) assert.deepEqual(identity(id), {id: null, name: null});
+  assert.equal(F.validSubjectId('a'.repeat(256)), true);
 });

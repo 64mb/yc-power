@@ -14,6 +14,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Customize organization and federation labels and icon colors, or restore their original appearance
 - Reorder federation and personal-account groups by dragging or Alt+Up/Down; the active group always appears first
 - Identify the current federation, organization, and cloud by a small dot beside their icons
+- Open cached personal resources through the console's native account-switch flow after visiting the personal account once
 - Optionally hide the organization level when a federation contains one organization
 - Choose whether to show cached Yandex account organizations alongside federations or keep the account modes separate
 - Keep federation groups together using cached clouds from other federations, refresh only the active federation, and sign in when opening a cached resource
@@ -25,6 +26,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Get automatic short names and colors, then override either with your own label and one of 32 preset colors in the Power and Material palettes
 - Choose one of 40 Gravity UI icons for each folder; clouds keep their original icon when folders are enabled, and support icon presets in clouds-only mode
 - Set individual console addresses to clouds-only mode to hide folders and skip background folder loading
+- Hide a lone federation heading automatically in clouds-only mode while keeping distinct account groups visible
 - Use the header button to show all clouds in the new style when an organization has fewer than 10 clouds
 - Drag clouds to reorder My clouds, or use Alt+Up/Down; the order is saved for each organization
 - Sort folders alphabetically by their displayed labels, keeping their order stable during refresh

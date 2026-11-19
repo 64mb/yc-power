@@ -4,7 +4,6 @@ const messages = {
   en: {
     activeContext: 'Current context',
     passportClouds: 'Clouds in account {name}', passportAccount: 'Yandex account', customizePassport: 'Customize Yandex account {name}',
-    switchPassport: 'Choose a Yandex account in the console account menu to open this resource',
     customizeOrganization: 'Customize organization {name}', customizeFederation: 'Customize federation {name}',
     icon_bucket: 'Object storage', icon_api: 'API', icon_desktop: 'Applications', icon_logs: 'Logs', icon_tasks: 'Tasks', icon_traffic: 'Traffic', icon_automation: 'Automation', icon_plugins: 'Plugins', icon_tools: 'Tools', icon_search: 'Search', icon_tag: 'Tags', icon_flag: 'Feature flags', icon_team: 'Team', icon_mail: 'Messages', icon_routing: 'Routing', icon_identity: 'Identity',
     importLegacy: 'Transfer settings',
@@ -31,7 +30,6 @@ const messages = {
   ru: {
     activeContext: 'Текущий контекст',
     passportClouds: 'Облака аккаунта {name}', passportAccount: 'Аккаунт Яндекса', customizePassport: 'Настроить аккаунт Яндекса {name}',
-    switchPassport: 'Выберите аккаунт Яндекса в меню учетной записи для перехода к ресурсу',
     customizeOrganization: 'Настроить организацию {name}', customizeFederation: 'Настроить федерацию {name}',
     icon_bucket: 'Объектное хранилище', icon_api: 'API', icon_desktop: 'Приложения', icon_logs: 'Логи', icon_tasks: 'Задачи', icon_traffic: 'Трафик', icon_automation: 'Автоматизация', icon_plugins: 'Плагины', icon_tools: 'Инструменты', icon_search: 'Поиск', icon_tag: 'Метки', icon_flag: 'Флаги функций', icon_team: 'Команда', icon_mail: 'Сообщения', icon_routing: 'Маршрутизация', icon_identity: 'Идентификация',
     importLegacy: 'Перенести настройки',

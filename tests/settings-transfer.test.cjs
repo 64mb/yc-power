@@ -245,3 +245,16 @@ test('round trips layout group order while preserving unknown groups and legacy 
     assert.throws(() => exportSettings({[key]: {groupOrder}}), /Invalid settings file/);
   }
 });
+
+test('personal profile subjects round trip without allowing subjects in federation profiles', () => {
+  const key = `yc-power:${publicOrigin}:passport-profile`;
+  const profile = {name: 'Synthetic person', subjectId: 'synthetic-subject', appearance: {label: 'Personal'}};
+  assert.deepEqual(parseSettings(exportSettings({[key]: profile}))[key], profile);
+  for (const subjectId of [null, '', '../bad', 'bad.subject', 'a'.repeat(257), 7, {}]) {
+    assert.throws(() => parseSettings(envelope({[key]: {...profile, subjectId}})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: {...profile, subjectId}}), /Invalid settings file/);
+  }
+  const federationKey = `yc-power:${publicOrigin}:federation:id:example-fed:profile`;
+  assert.throws(() => parseSettings(envelope({[federationKey]: profile})), /Invalid settings file/);
+  assert.throws(() => exportSettings({[federationKey]: profile}), /Invalid settings file/);
+});

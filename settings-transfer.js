@@ -96,10 +96,14 @@
           if ('groupOrder' in value) layout.groupOrder = strings(value.groupOrder);
           result[key] = layout;
         } else if (['profile', 'passport-profile'].includes(scope.kind)) {
-          fields(value, ['name', 'appearance']);
+          fields(value, scope.kind === 'passport-profile' ? ['name', 'appearance', 'subjectId'] : ['name', 'appearance']);
           if (!text(value.name)) fail();
           result[key] = {name: value.name};
           if ('appearance' in value) result[key].appearance = appearance(value.appearance);
+          if ('subjectId' in value) {
+            if (!Federation.validSubjectId(value.subjectId)) fail();
+            result[key].subjectId = value.subjectId;
+          }
         } else if (isCatalog) {
           if (!Array.isArray(value)) fail();
           for (const cloud of value) {

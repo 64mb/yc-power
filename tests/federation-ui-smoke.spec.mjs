@@ -342,21 +342,13 @@ test('personal organizations share the federation level only when enabled', asyn
   await page.evaluate(() => browser.storage.local.set({showPersonalOrganizations: true, hideSingleOrganization: true}));
   const personal = page.locator('[data-cached-passport]');
   await expect(personal).toContainText('Personal organization');
-  await expect(personal.getByRole('button', {name: 'Passport selected', exact: true})).toBeVisible();
+  await expect(personal.getByRole('link', {name: 'Passport selected', exact: true})).toBeVisible();
   const federationIcon = await page.locator('[data-federation-id="federation-alpha"] .ycp-group-icon').boundingBox();
   const account = page.locator('[data-passport-account]');
   await expect(account).toContainText('Personal test account');
   const personalIcon = await account.locator('[data-passport-heading] .ycp-group-icon').boundingBox();
   expect(personalIcon.x).toBeCloseTo(federationIcon.x, 1);
   await page.evaluate(() => {
-    const button = document.createElement('button'); button.setAttribute('aria-label', 'Account');
-    fixture.accountClicks = 0; button.onclick = () => {fixture.accountClicks++;}; document.body.append(button);
-  });
-  await personal.getByRole('button', {name: 'Passport selected', exact: true}).click();
-  await expect.poll(() => page.evaluate(() => fixture.accountClicks)).toBe(1);
-  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('yc-power:destination')).federationId)).toBeNull();
-  await page.evaluate(() => {
-    sessionStorage.removeItem('yc-power:destination');
     fixture.records.splice(0, fixture.records.length, {type: 'organization', id: 'personal-org', name: 'Personal organization'}, {type: 'cloud', id: 'personal-cloud', name: 'Personal cloud'});
     fixture.renderRows();
     history.replaceState(null, '', '/clouds/personal-cloud');
@@ -485,6 +477,10 @@ test('group labels toggle disclosure while customization buttons remain independ
   await openFederations(page);
   const federation = page.locator('[data-federation-id="federation-alpha"]');
   await expect(federation).toHaveCSS('cursor', 'pointer');
+  for (const row of [federation, active(page).locator('.ycp-cloud'), page.locator('.ycp-all-row')]) await expect(row).toHaveCSS('user-select', 'none');
+  await federation.getByText('Alpha federation', {exact: true}).dblclick();
+  expect(await page.evaluate(() => window.getSelection().toString())).toBe('');
+  await expect(active(page)).toBeVisible();
   await federation.getByText('Alpha federation', {exact: true}).click();
   await expect(active(page)).toHaveCount(0);
   await federation.getByText('Alpha federation', {exact: true}).click();
@@ -627,4 +623,147 @@ test('current context dots identify only active federation organization and clou
     await expect(page.locator('[data-ycp-host]')).toHaveCSS('background-color', background);
     await page.screenshot({path: testInfo.outputPath(`active-context-${theme}.png`)});
   }
+});
+
+for (const subjectId of ['synthetic-passport-subject', null]) {
+  test(`cached personal navigation opens native ${subjectId ? 'account switch and resumes only the matching subject' : 'account picker for legacy profiles'}`, async ({page}) => {
+    await openFederations(page);
+    await page.evaluate(async subjectId => {
+      const prefix = `yc-power:${location.origin}`;
+      await browser.storage.local.set({
+        showPersonalOrganizations: true,
+        [`${prefix}:passport-profile`]: {name: 'Personal account', ...(subjectId ? {subjectId} : {})},
+        [`${prefix}:passport-catalog`]: [{type: 'cloud', id: 'personal-cloud', name: 'Personal cloud', href: '/clouds/personal-cloud', organizationId: 'personal-org', organizationName: 'Personal organization', folders: [{type: 'folder', id: 'personal-folder', name: 'Personal folder', cloudId: 'personal-cloud', href: '/clouds/personal-cloud/personal-folder'}]}],
+        [`${prefix}:organization:id:personal-org`]: {mine: ['personal-cloud'], expandedClouds: ['personal-cloud'], initialized: true, custom: {}},
+      });
+    }, subjectId);
+    const link = page.locator('[data-cached-passport] .ycp-folder .ycp-link');
+    const href = new URL(await link.getAttribute('href'));
+    expect(href.pathname).toBe('/auth/switch');
+    expect(href.searchParams.get('redirectUrl')).toBe('/clouds/personal-cloud/personal-folder');
+    expect(href.searchParams.get('sub')).toBe(subjectId);
+    await page.route('**/auth/switch?**', route => route.fulfill({contentType: 'text/html', body: '<title>Native personal account switch</title>'}));
+    await link.click();
+    await expect(page).toHaveTitle('Native personal account switch');
+    const pending = await page.evaluate(() => JSON.parse(sessionStorage.getItem('yc-power:destination')));
+    expect(pending.federationId).toBeNull();
+    expect(pending.subjectId).toBe(subjectId || undefined);
+    expect(new URL(pending.href, fixtureOrigin).href).toBe(fixtureOrigin + '/clouds/personal-cloud/personal-folder');
+    if (!subjectId) return;
+    await page.route('**/clouds/personal-cloud/personal-folder', route => route.fulfill({contentType: 'text/html', body: '<title>Resumed personal folder</title>'}));
+    await page.goto(fixtureOrigin + '/tests/fixtures/native-tree.html?scenario=federations');
+    await expect(active(page)).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('yc-power:destination')))).toEqual(pending);
+    await page.evaluate(() => {
+      document.getElementById('fixture-identity').textContent = 'window.__DATA__ = {"user":{"isFederated":false,"id":"wrong-personal-subject","displayName":"Other personal account"}};';
+    });
+    await expect.poll(() => page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('wrong-personal-subject');
+    await expect(page).toHaveURL(/\/clouds\/cloud-alpha$/);
+    expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('yc-power:destination')))).toEqual(pending);
+    await page.evaluate(subjectId => {
+      document.getElementById('fixture-identity').textContent = 'window.__DATA__ = ' + JSON.stringify({user: {isFederated: false, id: subjectId, displayName: 'Personal account'}}) + ';';
+    }, subjectId);
+    await expect(page).toHaveTitle('Resumed personal folder');
+    expect(await page.evaluate(() => sessionStorage.getItem('yc-power:destination'))).toBeNull();
+  });
+}
+
+test('personal bootstrap learns the subject identifier without saving the passport uid', async ({page, baseURL}) => {
+  await page.route('**/tests/fixtures/native-tree.html?scenario=passport-real', async route => {
+    const response = await page.request.get(baseURL + '/tests/fixtures/native-tree.html?scenario=passport-real');
+    const body = (await response.text()).replace('"uid":"1234567890",', '"isFederated":false,"uid":"1234567890",');
+    await route.fulfill({response, body});
+  });
+  await page.goto(fixtureOrigin + '/tests/fixtures/native-tree.html?scenario=passport-real');
+  await expect(page.getByRole('link', {name: 'Personal selected', exact: true})).toBeVisible();
+  await expect.poll(() => page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('synthetic-personal-user');
+  const profile = await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]);
+  expect(profile.name).toBe('Synthetic personal account');
+  expect(profile).not.toHaveProperty('uid');
+  expect(JSON.stringify(profile)).not.toContain('1234567890');
+});
+
+test('personal subject changes discard another account catalog before native scanning', async ({page}) => {
+  await openFederations(page);
+  await seedOrderedGroups(page);
+  await page.evaluate(async () => {
+    const prefix = `yc-power:${location.origin}`;
+    await browser.storage.local.set({[`${prefix}:passport-profile`]: {name: 'Account A', subjectId: 'synthetic-subject-a'}});
+    fixture.personalPreferences = structuredClone(fixture.memory[`${prefix}:organization:id:personal-org`]);
+    fixture.subjectWrites = [];
+    const originalSet = browser.storage.local.set;
+    browser.storage.local.set = values => {
+      if (values[`${prefix}:passport-profile`]?.subjectId === 'synthetic-subject-b') fixture.subjectWrites.push(structuredClone(values));
+      return originalSet(values);
+    };
+    fixture.records.splice(0, fixture.records.length);
+    fixture.renderRows();
+    document.getElementById('fixture-identity').textContent = 'window.__DATA__ = {"user":{"isFederated":false,"id":"synthetic-subject-b","displayName":"Account B"}};';
+  });
+  await expect.poll(() => page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('synthetic-subject-b');
+  const snapshot = await page.evaluate(() => ({
+    catalog: fixture.memory[`yc-power:${location.origin}:passport-catalog`],
+    writes: fixture.subjectWrites,
+    preferences: fixture.memory[`yc-power:${location.origin}:organization:id:personal-org`],
+    originalPreferences: fixture.personalPreferences,
+  }));
+  expect(snapshot.catalog).toEqual([]);
+  expect(snapshot.writes.some(values => Array.isArray(values[`yc-power:${fixtureOrigin}:passport-catalog`]) && values[`yc-power:${fixtureOrigin}:passport-catalog`].length === 0)).toBe(true);
+  expect(snapshot.preferences).toEqual(snapshot.originalPreferences);
+  await expect(page.getByRole('link', {name: 'Personal one', exact: true})).toHaveCount(0);
+  await expect(page.getByRole('link', {name: 'Personal two', exact: true})).toHaveCount(0);
+  await page.goto(fixtureOrigin + '/tests/fixtures/native-tree.html?scenario=federations');
+  await expect(active(page)).toBeVisible();
+  await expect(page.locator('[data-passport-account]')).toHaveCount(0);
+  expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:organization:id:personal-org`])).toEqual(snapshot.originalPreferences);
+  expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('synthetic-subject-b');
+});
+
+test('cloud-only mode hides a lone federation without losing collapse or organization settings', async ({page}) => {
+  await openFederations(page);
+  const heading = page.locator('.ycp-mine > [data-federation-id="federation-alpha"]');
+  const organization = page.locator('.ycp-mine > .ycp-organization-group > .ycp-organization-row');
+  await heading.getByText('Alpha federation', {exact: true}).click();
+  await expect(heading.locator('button').first()).toHaveAttribute('aria-expanded', 'false');
+  await expect(active(page)).toHaveCount(0);
+  await page.evaluate(() => browser.storage.local.set({cloudOnlyHosts: [location.origin]}));
+  await expect(heading).toBeVisible();
+  await expect(cached(page)).toBeVisible();
+  await expect(active(page)).toHaveCount(0);
+  await page.evaluate(() => {
+    const key = `yc-power:${location.origin}:federation:id:federation-beta:organization:id:org-alpha`;
+    return browser.storage.local.set({[key]: {...fixture.memory[key], mine: []}});
+  });
+  await expect(cached(page)).toHaveCount(0);
+  await expect(heading).toHaveCount(0);
+  await expect(page.locator('.ycp-mine')).toHaveAttribute('data-federation-hidden', 'true');
+  await expect(active(page)).toBeVisible();
+  await expect(organization).toContainText('Alpha organization');
+  await expect(active(page).locator('.ycp-folder')).toHaveCount(0);
+  expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:layout`].collapsedOrganizations)).toContain('federation:federation-alpha');
+  await page.evaluate(() => browser.storage.local.set({hideSingleOrganization: true}));
+  await expect(organization).toHaveCount(0);
+  await expect(active(page)).toBeVisible();
+  await page.evaluate(() => {
+    const prefix = `yc-power:${location.origin}`;
+    return browser.storage.local.set({
+      showPersonalOrganizations: true,
+      [`${prefix}:passport-profile`]: {name: 'Personal account'},
+      [`${prefix}:passport-catalog`]: [{type: 'cloud', id: 'personal-cloud', name: 'Personal cloud', href: '/clouds/personal-cloud', organizationId: 'personal-org', organizationName: 'Personal organization', folders: []}],
+      [`${prefix}:organization:id:personal-org`]: {mine: ['personal-cloud'], initialized: true, custom: {}},
+    });
+  });
+  await expect(page.locator('[data-passport-account]')).toBeVisible();
+  await expect(heading).toBeVisible();
+  await expect(heading.locator('button').first()).toHaveAttribute('aria-expanded', 'false');
+  await expect(active(page)).toHaveCount(0);
+  await page.evaluate(() => browser.storage.local.set({showPersonalOrganizations: false}));
+  await expect(heading).toHaveCount(0);
+  await expect(active(page)).toBeVisible();
+  await page.evaluate(() => browser.storage.local.set({cloudOnlyHosts: [], hideSingleOrganization: false}));
+  await expect(heading).toBeVisible();
+  await expect(heading.locator('button').first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(organization).toBeVisible();
+  await expect(active(page)).toBeVisible();
+  await expect(active(page).getByRole('link', {name: 'Active custom folder', exact: true})).toBeVisible();
 });

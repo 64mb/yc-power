@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   const safeId = value => typeof value === 'string' && value.length >= 1 && value.length <= 128 && /^[A-Za-z0-9]/.test(value) && !/[^A-Za-z0-9_.-]/.test(value);
+  const validSubjectId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(value);
   function validOrigin(origin) {
     if (typeof origin !== 'string') return false;
     try {
@@ -33,6 +34,7 @@
       if (!user.federationId && user.isFederated !== true && user.isLocalFederated !== true && (user.isFederated === false || passport)) {
         const name = [user.displayName, user.login].find(value => typeof value === 'string' && value.trim() && value.length <= 2048) || null;
         identity = {id: null, name};
+        if (validSubjectId(user.id)) identity.subjectId = user.id;
       }
       else if (user.isFederated === true && safeId(user.federationId)) {
         const name = typeof user.federationName === 'string' && user.federationName.trim() && user.federationName.length <= 2048 ? user.federationName : user.federationId;
@@ -78,7 +80,13 @@
   }
   const identityKey = (id, value) => JSON.stringify([id, value]);
   const loginHref = (origin, id) => validOrigin(origin) && safeId(id) ? `${origin}/federations/${id}` : null;
-  const api = {identityFromScripts, profileKey, passportCatalogKey, passportProfileKey, federationId, catalogKey, scopeKey, parseKey, catalogGroups, identityKey, loginHref};
+  function passportLoginHref(origin, subjectId, redirectPath) {
+    if (!validOrigin(origin) || (subjectId !== null && subjectId !== undefined && !validSubjectId(subjectId)) || typeof redirectPath !== 'string' || !redirectPath.startsWith('/') || redirectPath.startsWith('//') || /[\\\x00-\x20\x7f]/.test(redirectPath)) return null;
+    const destination = new URL(redirectPath, origin);
+    if (destination.origin !== origin) return null;
+    return `${origin}/auth/switch?${subjectId == null ? '' : `sub=${encodeURIComponent(subjectId)}&`}redirectUrl=${encodeURIComponent(redirectPath)}`;
+  }
+  const api = {identityFromScripts, profileKey, passportCatalogKey, passportProfileKey, federationId, catalogKey, scopeKey, parseKey, catalogGroups, identityKey, loginHref, validSubjectId, passportLoginHref};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.YCPowerFederation = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
