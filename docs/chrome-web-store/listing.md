@@ -1,4 +1,4 @@
-# Chrome Web Store listing: YC Power 1.5.0
+# Chrome Web Store listing: YC Power 1.6.1
 
 ## Store details
 
@@ -14,8 +14,10 @@ A customizable sidebar for navigating clouds and folders in the Yandex Cloud con
 
 YC Power brings your frequently used clouds and folders together in a compact sidebar for the Yandex Cloud console.
 
-- Select and reorder clouds, and organize them by organization
-- Customize labels, colors, and folder icons
+- Select and reorder clouds, and organize them by federation, personal account, and organization
+- Keep inactive federations available from the local cache, with the current group always first
+- Customize federation and organization labels and colors, and choose from 40 cloud and folder icon presets
+- Identify the current federation, organization, and cloud by an icon indicator
 - Use clouds-only mode for individual console addresses
 - Add other HTTPS console addresses, including regional consoles, with your permission
 - Transfer settings and the navigation cache between browsers using a JSON file

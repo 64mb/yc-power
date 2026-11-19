@@ -138,14 +138,16 @@
       },
       flush(key) {
         const entry = pending.get(key);
-        if (!entry || entry.dispatched) return Promise.resolve();
+        if (!entry) return Promise.resolve();
+        if (entry.dispatched) return entry.promise;
         entry.dispatched = true;
-        return Promise.resolve().then(() => persist(key, entry.snapshot)).then(() => {
+        entry.promise = Promise.resolve().then(() => persist(key, entry.snapshot)).then(() => {
           if (pending.get(key) === entry) pending.delete(key);
         }, error => {
           if (pending.get(key) === entry) entry.dispatched = false;
           throw error;
         });
+        return entry.promise;
       },
     };
   }

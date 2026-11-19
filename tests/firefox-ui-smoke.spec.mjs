@@ -339,7 +339,7 @@ async function exercise(driver, origin, scenario) {
     await driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");');
     assert.ok(equal(await driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-folder .ycp-row-action").getAttribute("aria-expanded");'), "true"));
     grid = await driver.evaluate('const r=document.querySelector("[data-ycp-host]").shadowRoot;return Array.from(r.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);');
-    assert.ok(equal(grid, [8, 8, 8]), JSON.stringify(grid));
+    assert.ok(equal(grid, [8, 8, 8, 8, 8]), JSON.stringify(grid));
     preset = await driver.evaluate('return document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons button[value=database] .g-icon").innerHTML;');
     await driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons button[value=database]")');
     await driver.click('document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit button[type=submit]")');
@@ -352,7 +352,7 @@ async function exercise(driver, origin, scenario) {
     await driver.click('Array.from(document.querySelector("[data-ycp-host]").shadowRoot.querySelectorAll(".ycp-cloud button")).find(b=>b.dataset.ycpTooltip==="Label and color")');
     await driver.wait('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-edit");');
     assert.ok(!await driver.evaluate('return !!document.querySelector("[data-ycp-host]").shadowRoot.querySelector(".ycp-icons");'));
-    return { "scenario": scenario, "presets": "24 in 8x3 grid", "folderIcon": "saved and restored", "cloudIcon": "fixed" };
+    return { "scenario": scenario, "presets": "40 in 8x5 grid", "folderIcon": "saved and restored", "cloudIcon": "fixed" };
   }
   if (equal(scenario, "expand-state")) {
     await driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-cloud").length===2;');
@@ -404,12 +404,12 @@ async function exercise(driver, origin, scenario) {
     await driver.wait("return !!" + beta + '?.querySelector(".ycp-cloud");');
     assert.ok(equal(await driver.evaluate("return " + beta + '.querySelector(".ycp-cloud .ycp-link").getAttribute("href");'), href));
     for (const group of [alpha, beta]) {
-      await driver.click(group + '.querySelector(".ycp-organization-row button[aria-expanded]")');
+      await driver.click(group + '.querySelector(".ycp-organization-row button[aria-expanded]:not(.ycp-group-action)")');
     }
     await driver.wait('const ids=fixture.memory["yc-power:"+location.origin+":layout"].collapsedOrganizations;return ids.includes("org-alpha")&&ids.includes("org-beta");');
     await driver.navigate({ "url": origin + "/tests/fixtures/native-tree.html?scenario=multi-regional" });
-    await driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-organization-row button[aria-expanded=false]").length===2;');
-    await driver.click(alpha + '.querySelector(".ycp-organization-row button[aria-expanded]")');
+    await driver.wait('return document.querySelector("[data-ycp-host]")?.shadowRoot.querySelectorAll(".ycp-organization-row button[aria-expanded=false]:not(.ycp-group-action)").length===2;');
+    await driver.click(alpha + '.querySelector(".ycp-organization-row button[aria-expanded]:not(.ycp-group-action)")');
     await driver.wait("return !!" + alpha + '.querySelector(".ycp-cloud");');
     assert.ok(equal(await driver.evaluate("return " + beta + '.querySelector(".ycp-organization-row button").getAttribute("aria-expanded");'), "false"));
     assert.ok(!await driver.evaluate("return !!" + beta + '.querySelector(".ycp-cloud");'));
@@ -433,15 +433,15 @@ async function exercise(driver, origin, scenario) {
     assert.ok(equal(colors, ["rgb(17, 34, 51)", "rgb(68, 85, 102)"]), JSON.stringify(colors));
     icons = await driver.evaluate('return ["cloud-alpha","cloud-beta"].map(id=>' + root + '.querySelector("[data-cloud-id="+id+"] .ycp-folder .g-icon").innerHTML);');
     assert.ok(!equal(icons[0], icons[1]), JSON.stringify(icons));
-    await driver.click(beta + '.querySelector(".ycp-organization-row button[aria-expanded]")');
+    await driver.click(beta + '.querySelector(".ycp-organization-row button[aria-expanded]:not(.ycp-group-action)")');
     await driver.wait("return " + layout + '.collapsedOrganizations.includes("org-beta");');
     await driver.evaluate('const key="yc-power:"+location.origin+":organization:id:org-beta",prefs=structuredClone(fixture.memory[key]);prefs.expandedClouds=[];browser.storage.local.set({[key]:prefs});return true;');
     await driver.navigate({ "url": origin + "/tests/fixtures/native-tree.html?scenario=multi-grouped" });
-    await driver.wait("return " + beta + '?.querySelector(".ycp-organization-row button[aria-expanded=false]");');
+    await driver.wait("return " + beta + '?.querySelector(".ycp-organization-row button[aria-expanded=false]:not(.ycp-group-action)");');
     assert.ok(!await driver.evaluate("return !!" + beta + '.querySelector(".ycp-cloud");'));
     assert.ok(equal(await driver.evaluate("return " + alpha + '.querySelectorAll(".ycp-cloud").length;'), 2));
     await driver.evaluate('history.pushState(null,"","/clouds/cloud-beta/folder-beta");window.dispatchEvent(new PopStateEvent("popstate"));return true;');
-    await driver.wait("return " + beta + '.querySelector(".ycp-organization-row button[aria-expanded=true]")&&' + beta + '.querySelector(".ycp-folder");');
+    await driver.wait("return " + beta + '.querySelector(".ycp-organization-row button[aria-expanded=true]:not(.ycp-group-action)")&&' + beta + '.querySelector(".ycp-folder");');
     await driver.click(beta + '.querySelector(".ycp-folder .ycp-row-action")');
     await driver.wait("return !!" + root + '.querySelector(".ycp-edit");');
     await driver.evaluate("const e=" + root + '.querySelector(".ycp-edit input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(e,"Beta edited folder");e.dispatchEvent(new Event("input",{bubbles:true}));return true;');
@@ -588,7 +588,7 @@ async function exercise(driver, origin, scenario) {
     await edit_cloud();
     assert.ok(equal(await driver.evaluate("return " + root + '.querySelector(".ycp-edit input").value;'), initial_label));
     assert.ok(equal(await driver.evaluate("return Array.from(" + cloud + '.querySelectorAll("button")).find(b=>b.dataset.ycpTooltip==="Label and color").getAttribute("aria-expanded");'), "true"));
-    assert.ok(equal(await driver.evaluate("return Array.from(" + root + '.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);'), [8, 8, 8]));
+    assert.ok(equal(await driver.evaluate("return Array.from(" + root + '.querySelectorAll(".ycp-icons [role=row]")).map(e=>e.querySelectorAll("button").length);'), [8, 8, 8, 8, 8]));
     assert.ok(await driver.evaluate("return !!" + root + '.querySelector(".ycp-icons button[value=cloud]")&&!' + root + '.querySelector(".ycp-icons button[value=folder]");'));
     rocket = await driver.evaluate("return " + root + '.querySelector(".ycp-icons button[value=rocket] .g-icon").innerHTML;');
     await driver.click(root + '.querySelector(".ycp-icons button[value=rocket]")');
@@ -810,6 +810,8 @@ for (const denied of [false, true]) {
 
     const imported = structuredClone(exported);
     imported.settings.compactDensity = true;
+    imported.settings.hideSingleOrganization = true;
+    imported.settings.showPersonalOrganizations = false;
     imported.settings.domainHosts.push('https://beta.example');
     imported.settings.cloudOnlyHosts = ['https://beta.example'];
     imported.settings[transferOrganizationKey].custom['cloud:cloud-alpha'].label = 'Imported alpha';
@@ -818,7 +820,7 @@ for (const denied of [false, true]) {
       name: 'synthetic-settings.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported, null, 2)),
     });
     await expect(page.getByRole('status')).toHaveText('Settings loaded from JSON. Save to apply them');
-    await expect(page.locator('input[type=checkbox]')).toBeChecked();
+    await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
     await expect(page.locator('.domain-row input')).toHaveCount(3);
     expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
     expect(await page.evaluate(() => fixture.writes)).toEqual([]);
@@ -839,8 +841,8 @@ for (const denied of [false, true]) {
     await expect(page.locator('.domain-row input').first()).toBeEnabled();
     const expected = denied ? initialTransferSettings : imported.settings;
     await expect.poll(() => page.locator('.domain-row input').evaluateAll(inputs => inputs.map(input => input.value))).toEqual(expected.domainHosts);
-    if (denied) await expect(page.locator('input[type=checkbox]')).not.toBeChecked();
-    else await expect(page.locator('input[type=checkbox]')).toBeChecked();
+    if (denied) await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).not.toBeChecked();
+    else await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
     expect((await downloadSettings(page)).settings).toEqual(expected);
 
     if (!denied) {

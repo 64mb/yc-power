@@ -72,3 +72,189 @@ test('exports real scanned catalogs while dropping incidental row metadata', () 
   assert.equal(exported.includes('pinned'), false);
   assert.equal(parseSettings(exported)[key][0].folders.length, 1);
 });
+
+test('round trips separate federation catalogs and preferences sharing organization IDs', () => {
+  const stored = {domainHosts: [publicOrigin], cloudOnlyHosts: [], compactDensity: false};
+  for (const [index, federationId] of ['example-fed-a', 'example-fed-b'].entries()) {
+    const prefix = `yc-power:${publicOrigin}:federation:id:${federationId}`;
+    const appearance = {label: `Example group ${index}`, color: index ? '#abcdef' : '#123456'};
+    stored[`${prefix}:organization:id:example-org`] = {mine: [`example-cloud-${index}`], initialized: true, width: 360 + index, appearance};
+    stored[`${prefix}:profile`] = {name: `Example federation ${index}`, appearance: {...appearance, label: `Example federation label ${index}`}};
+    stored[`${prefix}:catalog`] = [{type: 'cloud', id: `example-cloud-${index}`, name: `Example cloud ${index}`, href: `/clouds/example-cloud-${index}`, organizationId: 'example-org', organizationName: 'Example organization', folders: []}];
+  }
+  stored[`yc-power:${publicOrigin}:layout`] = {scopeKey: `yc-power:${publicOrigin}:federation:id:example-fed-b:organization:id:example-org`};
+  assert.deepEqual(parseSettings(exportSettings(stored)), stored);
+  assert.equal(JSON.parse(exportSettings(stored)).version, 1);
+});
+
+test('accepts federated unscoped preferences and legacy layout selections', () => {
+  const scopeKey = `yc-power:${publicOrigin}:federation:id:example-fed:organization:unscoped`;
+  const stored = {[scopeKey]: {mine: [], initialized: false}, [`yc-power:${publicOrigin}:layout`]: {scopeKey}};
+  assert.equal(parseSettings(exportSettings(stored))[`yc-power:${publicOrigin}:layout`].scopeKey, scopeKey);
+  const legacy = Core.scopeKey(publicOrigin, 'example:org');
+  assert.deepEqual(parseSettings(exportSettings({[legacy]: {mine: []}}))[legacy], {mine: []});
+});
+
+test('rejects malformed federation scopes and invalid layout selections', () => {
+  const prefix = `yc-power:${publicOrigin}:federation`;
+  for (const key of [
+    `${prefix}:id::catalog`, `${prefix}:id:example%20fed:catalog`, `${prefix}:id:example%2Ffed:catalog`,
+    `${prefix}:id:example%3Afed:catalog`, `${prefix}:id:%ZZ:catalog`, `${prefix}:id:${'a'.repeat(129)}:catalog`,
+    `${prefix}:id:example.fed:catalog`, `${prefix}:id:example-fed:organization:id:`,
+    `${prefix}:id:example-fed:organization:id:%ZZ`, `${prefix}:id:example-fed:catalog:extra`,
+    `${prefix}:example-fed:catalog`,
+  ]) {
+    assert.throws(() => parseSettings(envelope({[key]: {}})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: {}}), /Invalid settings file/);
+  }
+  for (const scopeKey of [
+    `yc-power:${customOrigin}:federation:id:example-fed:organization:id:example-org`,
+    `${prefix}:id:example-fed:catalog`,
+    `yc-power:${publicOrigin}:layout`,
+  ]) assert.throws(() => parseSettings(envelope({[`yc-power:${publicOrigin}:layout`]: {scopeKey}})), /Invalid settings file/);
+});
+
+test('keeps strict catalog field validation for federated imports', () => {
+  const key = `yc-power:${publicOrigin}:federation:id:example-fed:catalog`;
+  const cloud = {type: 'cloud', id: 'example-cloud', name: 'Example cloud', href: '/clouds/example-cloud', folders: []};
+  assert.throws(() => parseSettings(envelope({[key]: [{...cloud, token: 'unexpected'}]})), /Invalid settings file/);
+  assert.throws(() => parseSettings(envelope({[key]: [{...cloud, folders: [{type: 'folder', id: 'example-folder', name: 'Example folder', href: '/folders/example-folder', token: 'unexpected'}]}]})), /Invalid settings file/);
+});
+
+test('round trips federation profile names and rejects invalid profile fields', () => {
+  const key = `yc-power:${publicOrigin}:federation:id:example-fed:profile`;
+  const profile = {name: 'Example federation'};
+  assert.deepEqual(parseSettings(exportSettings({[key]: profile}))[key], profile);
+  for (const value of [{}, {name: 7}, {name: 'a'.repeat(2049)}, {name: 'Example', token: 'unexpected'}, [], null]) {
+    assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: value}), /Invalid settings file/);
+  }
+});
+
+test('retains explicit legacy association without accepting nonboolean flags', () => {
+  const key = `yc-power:${publicOrigin}:federation:id:example-fed:organization:id:example-org`;
+  assert.equal(parseSettings(exportSettings({[key]: {legacyImported: true}}))[key].legacyImported, true);
+  assert.throws(() => parseSettings(envelope({[key]: {legacyImported: 'yes'}})), /Invalid settings file/);
+});
+
+test('round trips partial appearance and validates organization and federation appearance fields', () => {
+  const organizationKey = Core.scopeKey(publicOrigin, 'example-org');
+  const profileKey = `yc-power:${publicOrigin}:federation:id:example-fed:profile`;
+  for (const key of [organizationKey, profileKey]) {
+    const base = key === profileKey ? {name: 'Example federation'} : {};
+    for (const appearance of [{}, {label: ''}, {color: '#123456'}, {label: 'a'.repeat(2048), color: 'b'.repeat(2048)}]) {
+      const value = {...base, appearance};
+      assert.deepEqual(parseSettings(exportSettings({[key]: value}))[key], value);
+    }
+    for (const appearance of [null, [], 'invalid', {label: null}, {color: 7}, {label: {}}, {color: false}, {label: 'a'.repeat(2049)}, {color: 'a'.repeat(2049)}, {icon: 'rocket'}, {label: 'Example', unknown: {}}]) {
+      const value = {...base, appearance};
+      assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
+      assert.throws(() => exportSettings({[key]: value}), /Invalid settings file/);
+    }
+  }
+});
+
+test('imports version one preferences and profiles without appearance unchanged', () => {
+  const organizationKey = Core.scopeKey(publicOrigin, 'example-org');
+  const profileKey = `yc-power:${publicOrigin}:federation:id:example-fed:profile`;
+  const stored = {
+    [organizationKey]: {mine: ['example-cloud'], custom: {}, initialized: true},
+    [profileKey]: {name: 'Example federation'},
+  };
+  const imported = parseSettings(envelope(stored));
+  assert.deepEqual(imported[organizationKey], stored[organizationKey]);
+  assert.deepEqual(imported[profileKey], stored[profileKey]);
+});
+
+test('round trips optional organization visibility flags without adding missing flags', () => {
+  const defaults = {domainHosts: [publicOrigin], cloudOnlyHosts: [], compactDensity: false};
+  assert.deepEqual(parseSettings(envelope({})), defaults);
+  assert.deepEqual(JSON.parse(exportSettings({})).settings, defaults);
+  for (const key of ['hideSingleOrganization', 'showPersonalOrganizations']) {
+    for (const value of [true, false]) {
+      assert.deepEqual(parseSettings(exportSettings({[key]: value})), {...defaults, [key]: value});
+    }
+    for (const value of [null, 0, 1, 'true', [], {}]) {
+      assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
+      assert.throws(() => exportSettings({[key]: value}), /Invalid settings file/);
+    }
+  }
+});
+
+test('round trips personal catalogs with the same validation and metadata filtering as catalogs', () => {
+  const key = `yc-power:${publicOrigin}:passport-catalog`;
+  const folder = {type: 'folder', id: 'example-folder', name: 'Example folder', href: '/folders/example-folder', cloudId: 'example-cloud'};
+  const cloud = {type: 'cloud', id: 'example-cloud', name: 'Example cloud', href: '/clouds/example-cloud', organizationId: 'example-org', organizationName: 'Example organization', folders: [folder]};
+  const expected = Core.catalogCache([cloud], publicOrigin);
+  assert.deepEqual(parseSettings(envelope({[key]: [cloud]}))[key], expected);
+  const output = exportSettings({[key]: [{...cloud, offset: 10, pinned: false, folders: [{...folder, offset: 20}]}]});
+  assert.deepEqual(parseSettings(output)[key], expected);
+  assert.equal(output.includes('offset'), false);
+  assert.equal(output.includes('pinned'), false);
+  for (const value of [null, {}, [{id: 'bad'}], [{...cloud, folders: {}}]]) {
+    assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: value}), /Invalid settings file/);
+  }
+  for (const value of [[{...cloud, token: 'unexpected'}], [{...cloud, folders: [{...folder, token: 'unexpected'}]}]]) {
+    assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
+    assert.equal(exportSettings({[key]: value}).includes('unexpected'), false);
+  }
+});
+
+test('round trips personal account profiles and rejects invalid fields and federated profile keys', () => {
+  const key = `yc-power:${publicOrigin}:passport-profile`;
+  for (const profile of [
+    {name: 'Example person'},
+    {name: 'Example person', appearance: {}},
+    {name: 'Example person', appearance: {label: 'Personal account', color: '#123456'}},
+  ]) {
+    assert.deepEqual(parseSettings(envelope({[key]: profile}))[key], profile);
+    assert.deepEqual(parseSettings(exportSettings({[key]: profile}))[key], profile);
+  }
+  for (const profile of [
+    null, [], {}, {name: 7}, {name: 'a'.repeat(2049)},
+    {name: 'Example person', token: 'unexpected'},
+    {name: 'Example person', appearance: null},
+    {name: 'Example person', appearance: {label: {}}},
+    {name: 'Example person', appearance: {color: false}},
+    {name: 'Example person', appearance: {label: 'a'.repeat(2049)}},
+    {name: 'Example person', appearance: {icon: 'person'}},
+  ]) {
+    assert.throws(() => parseSettings(envelope({[key]: profile})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: profile}), /Invalid settings file/);
+  }
+  const nestedKey = `yc-power:${publicOrigin}:federation:id:example-fed:passport-profile`;
+  assert.throws(() => parseSettings(envelope({[nestedKey]: {name: 'Example person'}})), /Invalid settings file/);
+  assert.throws(() => exportSettings({[nestedKey]: {name: 'Example person'}}), /Invalid settings file/);
+});
+
+test('round trips layout group order while preserving unknown groups and legacy layouts', () => {
+  const key = `yc-power:${publicOrigin}:layout`;
+  for (const layout of [
+    {},
+    {width: 360, collapsedOrganizations: ['example-org']},
+    {groupOrder: []},
+    {groupOrder: ['federation:example-fed-b', 'account:passport', 'federation:removed-fed', 'federation:example-fed-a']},
+    {groupOrder: ['a'.repeat(2048)]},
+  ]) {
+    assert.deepEqual(parseSettings(envelope({[key]: layout}))[key], layout);
+    assert.deepEqual(parseSettings(exportSettings({[key]: layout}))[key], layout);
+  }
+  for (const groupOrder of [null, {}, 'account:passport', false, [null], [7], [{}], ['a'.repeat(2049)]]) {
+    assert.throws(() => parseSettings(envelope({[key]: {groupOrder}})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: {groupOrder}}), /Invalid settings file/);
+  }
+});
+
+test('personal profile subjects round trip without allowing subjects in federation profiles', () => {
+  const key = `yc-power:${publicOrigin}:passport-profile`;
+  const profile = {name: 'Synthetic person', subjectId: 'synthetic-subject', appearance: {label: 'Personal'}};
+  assert.deepEqual(parseSettings(exportSettings({[key]: profile}))[key], profile);
+  for (const subjectId of [null, '', '../bad', 'bad.subject', 'a'.repeat(257), 7, {}]) {
+    assert.throws(() => parseSettings(envelope({[key]: {...profile, subjectId}})), /Invalid settings file/);
+    assert.throws(() => exportSettings({[key]: {...profile, subjectId}}), /Invalid settings file/);
+  }
+  const federationKey = `yc-power:${publicOrigin}:federation:id:example-fed:profile`;
+  assert.throws(() => parseSettings(envelope({[federationKey]: profile})), /Invalid settings file/);
+  assert.throws(() => exportSettings({[federationKey]: profile}), /Invalid settings file/);
+});

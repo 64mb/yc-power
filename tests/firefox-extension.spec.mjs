@@ -91,7 +91,7 @@ async function installTemporaryAddon(port, addonPath) {
 
 test('installed Firefox add-on selects initially unselected regional and local clouds', async ({}, testInfo) => {
   if (process.env.YC_POWER_DOCKER !== '1') throw new Error('Firefox extension checks must run in the isolated Docker test container');
-  await access('/.dockerenv');
+  await access('/etc/yc-power-browser-test-container');
   test.setTimeout(120000);
   const directory = await mkdtemp(path.join(tmpdir(), 'yc-power-firefox-extension-'));
   const uuid = randomUUID();
@@ -133,11 +133,15 @@ test('installed Firefox add-on selects initially unselected regional and local c
         regionIcon.innerHTML='<circle cx="8" cy="8" r="6" fill="blue"/>';icon.append(regionIcon);a.append(icon);
       }
       a.style.display='flex';a.style.alignItems='center';a.style.minWidth='0';a.style.flex='1';a.append(title);item.append(a);const actions=document.createElement('div');actions.className='cloud-tree-list-item__actions';item.append(actions);li.append(item);return li;`);
+    let servedIdentity = null;
     await context.route(origin + '/**', async route => {
       const pathname = new URL(route.request().url()).pathname;
       if (['/options.css', '/content.css'].includes(pathname)) {
         await route.fulfill({contentType: 'text/css', body: await readFile(path.join(root, pathname.slice(1)), 'utf8')});
-      } else await route.fulfill({contentType: 'text/html', body: html});
+      } else {
+        const body = servedIdentity ? html.replace('</head>', `<script>window.__DATA__ = ${JSON.stringify({user: servedIdentity})};</script></head>`) : html;
+        await route.fulfill({contentType: 'text/html', body});
+      }
     });
     page = await context.newPage();
     const errors = [];
@@ -170,6 +174,85 @@ test('installed Firefox add-on selects initially unselected regional and local c
     await expect(page.locator('[data-ycp-host] a[href*="targetRegionId=kz"]')).toBeVisible();
     expect(errors).toEqual([]);
     await testInfo.attach('installed-firefox-extension', {body: await page.screenshot({fullPage: true}), contentType: 'image/png'});
+
+    const alpha = {isFederated: true, federationId: 'example.federation-alpha', federationName: 'Example Alpha federation'};
+    const beta = {isFederated: true, federationId: 'example.federation-beta', federationName: 'Example Beta federation'};
+    const visitFederation = async identity => {
+      servedIdentity = identity;
+      await page.goto(origin + '/tests/fixtures/native-tree.html?scenario=small');
+      await expect(page.locator('[data-ycp-host] .ycp-toggle button')).toBeVisible({timeout: 20000});
+      await expect(page.locator(`[data-federation-id="${identity.federationId}"]`)).toContainText(identity.federationName);
+      expect(await page.evaluate(() => typeof window.browser)).toBe('undefined');
+    };
+    const pinAlpha = async () => {
+      await page.locator('[data-ycp-host] .ycp-toggle button').click();
+      const row = page.locator('[data-list-item="cloud.cloud-alpha"]');
+      await row.hover();
+      await expect(row.locator('.ycp-add-native')).toHaveAttribute('aria-label', 'Add to my clouds');
+      await row.locator('.ycp-add-native').click();
+      await page.locator('[data-ycp-host] .ycp-toggle button').click();
+      await expect(page.locator('[data-ycp-host] [data-cloud-id="cloud-alpha"]')).toHaveCount(1);
+      await expect(page.locator('[data-ycp-host] [data-cloud-id="cloud-alpha"] .ycp-folder .ycp-link')).toHaveAttribute('href', '/clouds/cloud-alpha/folder-alpha');
+    };
+    await visitFederation(alpha);
+    await pinAlpha();
+    await visitFederation(beta);
+    await expect(page.locator('[data-ycp-host] [data-cloud-id="cloud-alpha"]')).toHaveCount(0);
+    await pinAlpha();
+    await visitFederation(alpha);
+    const currentCloud = page.locator('[data-ycp-host] [data-cloud-id="cloud-alpha"]');
+    const cachedCloud = page.locator('[data-ycp-host] [data-cached-cloud-id="cloud-alpha"]');
+    await expect(currentCloud).toHaveCount(1);
+    await expect(cachedCloud).toHaveCount(1);
+    await expect(page.locator(`[data-cached-federation="${beta.federationId}"]`)).toContainText(beta.federationName);
+    await expect(page.locator(`[data-cached-federation="${alpha.federationId}"]`)).toHaveCount(0);
+    await page.evaluate(() => {
+      history.pushState(null, '', '/clouds/cloud-alpha/folder-alpha');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(currentCloud.locator('.ycp-folder')).toHaveAttribute('data-current', 'true');
+    await expect(cachedCloud.locator('.ycp-folder')).not.toHaveAttribute('data-current', 'true');
+    expect(errors).toEqual([]);
+    await testInfo.attach('installed-firefox-federation-isolation', {body: await page.screenshot({fullPage: true}), contentType: 'image/png'});
+
+    const allClouds = page.locator('[data-ycp-host] .ycp-toggle button');
+    const nativeTree = page.locator('[data-ycp-aside] > .cloud-tree-list-container');
+    await expect(allClouds).toHaveAttribute('aria-expanded', 'false');
+    await allClouds.click();
+    await expect(allClouds).toHaveAttribute('aria-expanded', 'true');
+    await expect(nativeTree).not.toHaveAttribute('data-ycp-covered');
+    await page.locator('[data-ycp-host]').evaluate(host => host.setAttribute('data-test-before-addon-reload', 'true'));
+    const documentToken = await page.evaluate(() => {
+      window.__ycPowerReloadDocumentToken = Math.random().toString(36);
+      return window.__ycPowerReloadDocumentToken;
+    });
+    const reinstalled = await installTemporaryAddon(debuggerPort, archive);
+    expect(reinstalled.addon?.id ?? reinstalled.id).toBe('yc-power@local');
+    await testInfo.attach('firefox-temporary-addon-reinstall', {body: JSON.stringify(reinstalled, null, 2), contentType: 'application/json'});
+    await expect(page.locator('[data-test-before-addon-reload]')).toHaveCount(0, {timeout: 20000});
+    await expect(page.locator('[data-ycp-host]')).toHaveCount(1);
+    await expect(allClouds).toBeEnabled();
+    expect(await page.evaluate(() => window.__ycPowerReloadDocumentToken)).toBe(documentToken);
+    await expect(allClouds).toHaveAttribute('aria-expanded', 'false');
+    await expect(nativeTree).toHaveAttribute('data-ycp-covered', '');
+    await expect(nativeTree).toHaveAttribute('inert', '');
+    await expect(nativeTree).toHaveAttribute('aria-hidden', 'true');
+    expect(await nativeTree.evaluate(tree => getComputedStyle(tree).pointerEvents)).toBe('none');
+    await allClouds.click();
+    await expect(allClouds).toHaveAttribute('aria-expanded', 'true');
+    await expect(nativeTree).not.toHaveAttribute('data-ycp-covered');
+    await expect(nativeTree).not.toHaveAttribute('inert');
+    await expect(nativeTree).not.toHaveAttribute('aria-hidden');
+    await allClouds.click();
+    await expect(allClouds).toHaveAttribute('aria-expanded', 'false');
+    await expect(nativeTree).toHaveAttribute('data-ycp-covered', '');
+    await expect(nativeTree).toHaveAttribute('inert', '');
+    await expect(nativeTree).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('[data-ycp-host]')).toHaveCount(1);
+    expect(errors).toEqual([]);
+    await testInfo.attach('installed-firefox-addon-reload', {body: await page.screenshot({fullPage: true}), contentType: 'image/png'});
+
+
   } catch (error) {
     const diagnostics = {consoleMessages};
     if (page && !page.isClosed()) {

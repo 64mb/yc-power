@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   const Core = typeof module !== 'undefined' && module.exports ? require('./core.js') : root.YCPowerCore;
+  const Federation = typeof module !== 'undefined' && module.exports ? require('./federation.js') : root.YCPowerFederation;
   const MAX_BYTES = 5 * 1024 * 1024;
   const FORMAT = 'yc-power-settings';
   const forbidden = new Set(['__proto__', 'constructor', 'prototype']);
@@ -35,20 +36,22 @@
     return value;
   }
   function scopedKey(key) {
-    if (typeof key !== 'string') fail();
-    const match = /^yc-power:(https:\/\/[^/]+):(organization:(?:unscoped|id:[^:]+)|layout|catalog)$/.exec(key);
-    if (!match || origin(match[1]) !== match[1]) fail();
-    if (match[2].startsWith('organization:id:')) {
-      try { if (!decodeURIComponent(match[2].slice(16))) fail(); } catch { fail(); }
-    }
-    return {origin: match[1], kind: match[2]};
+    const scope = Federation.parseKey(key);
+    if (!scope || origin(scope.origin) !== scope.origin) fail();
+    return scope;
+  }
+  function appearance(value) {
+    fields(value, ['label', 'color']);
+    if (Object.values(value).some(item => !text(item))) fail();
+    return {...value};
   }
   function preferences(value) {
-    fields(value, ['mine', 'initialized', 'width', 'custom', 'showAllModern', 'expandedClouds']);
+    fields(value, ['mine', 'initialized', 'width', 'custom', 'showAllModern', 'expandedClouds', 'legacyImported', 'appearance']);
     const result = {};
     for (const [key, item] of Object.entries(value)) {
       if (['mine', 'expandedClouds'].includes(key)) result[key] = strings(item);
-      else if (['initialized', 'showAllModern'].includes(key)) {
+      else if (key === 'appearance') result[key] = appearance(item);
+      else if (['initialized', 'showAllModern', 'legacyImported'].includes(key)) {
         if (typeof item !== 'boolean') fail();
         result[key] = item;
       } else if (key === 'width') result[key] = width(item);
@@ -73,24 +76,35 @@
     for (const [key, value] of Object.entries(stored)) {
       if (key === 'domainHosts' || key === 'cloudOnlyHosts') {
         result[key] = [...new Set(strings(value).map(origin))];
-      } else if (key === 'compactDensity') {
+      } else if (['compactDensity', 'hideSingleOrganization', 'showPersonalOrganizations'].includes(key)) {
         if (typeof value !== 'boolean') fail();
         result[key] = value;
       } else if (key.startsWith('yc-power:')) {
         const scope = scopedKey(key);
-        if (scope.kind !== 'catalog' || strict) plain(value);
+        const isCatalog = ['catalog', 'passport-catalog'].includes(scope.kind);
+        if (!isCatalog || strict) plain(value);
         if (scope.kind === 'layout') {
-          fields(value, ['scopeKey', 'width', 'collapsedOrganizations']);
+          fields(value, ['scopeKey', 'width', 'collapsedOrganizations', 'groupOrder']);
           const layout = {};
           if ('scopeKey' in value) {
             const selected = scopedKey(value.scopeKey);
-            if (selected.origin !== scope.origin || !selected.kind.startsWith('organization:')) fail();
+            if (selected.origin !== scope.origin || selected.kind !== 'organization') fail();
             layout.scopeKey = value.scopeKey;
           }
           if ('width' in value) layout.width = width(value.width);
           if ('collapsedOrganizations' in value) layout.collapsedOrganizations = strings(value.collapsedOrganizations);
+          if ('groupOrder' in value) layout.groupOrder = strings(value.groupOrder);
           result[key] = layout;
-        } else if (scope.kind === 'catalog') {
+        } else if (['profile', 'passport-profile'].includes(scope.kind)) {
+          fields(value, scope.kind === 'passport-profile' ? ['name', 'appearance', 'subjectId'] : ['name', 'appearance']);
+          if (!text(value.name)) fail();
+          result[key] = {name: value.name};
+          if ('appearance' in value) result[key].appearance = appearance(value.appearance);
+          if ('subjectId' in value) {
+            if (!Federation.validSubjectId(value.subjectId)) fail();
+            result[key].subjectId = value.subjectId;
+          }
+        } else if (isCatalog) {
           if (!Array.isArray(value)) fail();
           for (const cloud of value) {
             if (!record(cloud)) fail();

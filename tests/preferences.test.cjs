@@ -87,3 +87,20 @@ test('a completed older save cannot clear a newer pending edit', async () => {
   await second;
   assert.deepEqual(writes, [{mine:['first']},{mine:['second']}]);
 });
+
+test('navigation can await an already dispatched preferences write', async () => {
+  let complete;
+  const writes = [];
+  const sync = preferenceSync({}, (key, settings) => new Promise(resolve => { writes.push(settings); complete = resolve; }));
+  sync.stage(a, {mine: ['selected']});
+  const first = sync.flush(a);
+  await Promise.resolve();
+  let ready = false;
+  const navigation = sync.flush(a).then(() => { ready = true; });
+  await Promise.resolve();
+  assert.equal(ready, false);
+  complete();
+  await Promise.all([first, navigation]);
+  assert.equal(ready, true);
+  assert.deepEqual(writes, [{mine: ['selected']}]);
+});

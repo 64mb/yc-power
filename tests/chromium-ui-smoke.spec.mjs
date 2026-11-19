@@ -8,7 +8,7 @@ import {chromium, test} from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('installed MV3 extension saves settings, transfers preferences and injects regional panel', async ({}, testInfo) => {
     if (process.env.YC_POWER_DOCKER !== '1') throw new Error('Browser smoke tests must run in the isolated Docker test container');
-    await access('/.dockerenv');
+    await access('/etc/yc-power-browser-test-container');
     const directory = await mkdtemp(path.join(os.tmpdir(), 'yc-power-chromium-'));
     let context;
     let page;
@@ -92,7 +92,43 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
         await page.locator('[data-ycp-host] a[href*="targetRegionId=region-beta"]').first().waitFor();
         assert.equal(await page.evaluate(() => typeof window.browser), 'undefined');
         assert.equal(await page.locator('[data-ycp-host]').count(), 1);
-        console.log(JSON.stringify({browser: 'Chromium', manifestVersion: 3, options: 'two origins and cloud-only persisted across reload', transfer: 'real export download and import persisted on Save', logo: 'loaded', background: 'dynamic registration verified', content: 'real isolated injection and regional link verified', permissions: 'synthetic hosts granted at test installation, native permission prompt not tested'}));
+        const resetPage = await context.newPage();
+        await resetPage.goto(extensionOrigin + '/options.html');
+        await resetPage.getByRole('button', {name: 'Reset all settings', exact: true}).click();
+        await resetPage.getByRole('dialog').getByRole('button', {name: 'Reset all settings', exact: true}).click();
+        await resetPage.getByRole('status').filter({hasText: 'All settings have been reset. Reload the console pages'}).waitFor();
+        await page.waitForFunction(() => !document.querySelector('[data-ycp-host], .ycp-add-native'));
+        const assertResetStorage = async () => {
+            const stored = await worker.evaluate(() => chrome.storage.local.get(null));
+            assert.equal(typeof stored._ycPowerReset, 'string');
+            assert.ok(stored._ycPowerReset.length > 0);
+            const {_ycPowerReset, ...settings} = stored;
+            assert.deepEqual(settings, {
+                domainHosts: ['https://console.yandex.cloud'],
+                cloudOnlyHosts: [],
+                compactDensity: false,
+                hideSingleOrganization: false,
+                showPersonalOrganizations: false,
+            });
+        };
+        await assertResetStorage();
+        await resetPage.waitForFunction(async () => (await chrome.scripting.getRegisteredContentScripts())
+            .every((script) => !script.matches.includes('https://beta.example/*')));
+        await worker.evaluate(async () => {
+            const [tab] = await chrome.tabs.query({url: 'https://beta.example/*'});
+            if (!tab) throw new Error('Synthetic console tab was not found');
+            await chrome.scripting.executeScript({target: {tabId: tab.id}, files: ['browser-alias.js', 'content.js']});
+        });
+        // wait past pending persistence and reinjection startup to detect resurrected scoped settings
+        await page.waitForTimeout(1000);
+        assert.equal(await page.locator('[data-ycp-host], .ycp-add-native').count(), 0);
+        await assertResetStorage();
+        await page.reload();
+        await page.waitForLoadState('load');
+        assert.equal(await page.locator('[data-ycp-host], .ycp-add-native').count(), 0);
+        await assertResetStorage();
+        await resetPage.close();
+        console.log(JSON.stringify({browser: 'Chromium', manifestVersion: 3, options: 'two origins and cloud-only persisted across reload', transfer: 'real export download and import persisted on Save', logo: 'loaded', background: 'dynamic registration verified', content: 'real isolated injection and regional link verified', reset: 'installed extension reset clears scopes and blocks stale reinjection', permissions: 'synthetic hosts granted at test installation, native permission prompt not tested'}));
     } finally {
         if (page && !page.isClosed()) {
             const screenshot = testInfo.outputPath('chromium-extension.png');
