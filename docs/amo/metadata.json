@@ -13,8 +13,8 @@
   "version": {
     "license": "all-rights-reserved",
     "release_notes": {
-      "en-US": "Hide cloud icon indicators in clouds-only mode. Hide the organization indicator when a lone federation is hidden and contains only one organization. Keep active cloud row highlighting and indicators for other navigation contexts.",
-      "ru": "Убраны точки у облаков в режиме только облаков. У единственной организации точка также скрывается, если уровень единственной федерации скрыт. Подсветка активного облака и индикаторы в остальных режимах сохранены."
+      "en-US": "Add optional cloud-colored console logos and colored folder badges. Open settings imports in a persistent tab and apply imported settings with Save. Improve settings status text and navigation labels.",
+      "ru": "Добавлены настройки цвета логотипа консоли и значка текущего каталога. Импорт открывается в отдельной вкладке, настройки применяются кнопкой «Сохранить». Улучшены подписи и сообщения в настройках."
     },
     "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
   }

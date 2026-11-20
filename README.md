@@ -36,7 +36,9 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Use compact Gravity UI actions and drag the sidebar edge to adjust its width, with an automatic minimum that keeps the actions on one line and a 440 px maximum
 - Start with the current cloud automatically selected when it can be identified on first use
 - Enable compact mode in extension settings to reduce row height and spacing
-- Export settings as two-space-indented JSON and import them across browsers; imported settings are staged until you select **Save**, when the browser requests any required permissions
+- Export settings as two-space-indented JSON and import them across browsers; review imported settings in the form and select **Save** to apply them and grant access to new console addresses
+- Import from a persistent settings page so choosing a file does not close an extension popup mid-operation
+- Optionally color the native console logo by the current cloud and show the current folder icon at its upper-right corner
 - Reset all settings from the extension settings page after confirmation
 - Follow the console's Gravity theme and font, including light and dark themes
 - Use Russian or English according to the console language; extension settings follow the browser language, with English as the fallback

@@ -53,6 +53,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   let statusKey = 'reading', statusArgs = {}, lastUrl = location.href, rescan = false;
   let themeOverrides = {}, panelWidth = 360, minimumWidth = 1, compactDensity = false, foldersEnabled = true;
   let hideSingleOrganization = false, showPersonalOrganizations = false;
+  let colorConsoleLogo = false, showFolderBadge = false, consoleLogo = null;
   const personalMode = () => identity !== null && federationId === null;
   function activeCatalog() {
     if (!identity && !canScanIdentity()) return [];
@@ -438,6 +439,87 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     const identifiers = new Set([...header?.querySelectorAll('.g-text') || []].map(node => node.textContent.trim()));
     const headerCloud = state.clouds.find(cloud => identifiers.has(cloud.id));
     return Core.currentCloud(state.clouds, location.href, location.origin, selectedRoute?.type === 'cloud' ? selectedRoute.id : headerCloud?.id);
+  }
+  const consoleLogoSelector = 'svg[viewBox="0 0 32 32"] path[d^="M23.858 27.411c-2.813 1.925"]';
+  const logoFillMarker = 'data-ycp-logo-original-fill', logoPositionMarker = 'data-ycp-logo-original-position';
+  function restoreMarkedStyle(node, property, marker) {
+    const stored = node.getAttribute(marker);
+    if (stored === null) return;
+    try {
+      const {value, priority} = JSON.parse(stored);
+      if (typeof value === 'string' && ['', 'important'].includes(priority)) {
+        if (value) node.style.setProperty(property, value, priority);
+        else node.style.removeProperty(property);
+      }
+    } catch { /* discard invalid decoration metadata */ }
+    node.removeAttribute(marker);
+  }
+  function restoreConsoleLogo() {
+    if (!consoleLogo) return;
+    const {path, fill, priority, badge, badgeRoot, anchor, position} = consoleLogo;
+    if (fill) path.style.setProperty('fill', fill, priority);
+    else path.style.removeProperty('fill');
+    path.removeAttribute(logoFillMarker);
+    badgeRoot?.unmount(); badge?.remove();
+    if (position) anchor.style.setProperty('position', position.value, position.priority);
+    else if (consoleLogo.positionChanged) anchor.style.removeProperty('position');
+    anchor.removeAttribute(logoPositionMarker);
+    consoleLogo = null;
+  }
+  function updateConsoleLogo() {
+    if (stopped) return;
+    const path = [...document.querySelectorAll(consoleLogoSelector)].find(node => {
+      const anchor = node.closest('a');
+      return anchor && !node.closest('[data-ycp-host], .cloud-tree-list-container') && anchor.closest('nav, header, [class*="navbar"], [class*="navigation"], [class*="aside-header"], .console-dashboard-layout__aside');
+    });
+    if (consoleLogo?.path !== path || !colorConsoleLogo && !showFolderBadge) restoreConsoleLogo();
+    if (path && !consoleLogo) {
+      const anchor = path.closest('a');
+      restoreMarkedStyle(path, 'fill', logoFillMarker);
+      restoreMarkedStyle(anchor, 'position', logoPositionMarker);
+      anchor.querySelectorAll(':scope > [data-ycp-folder-badge]').forEach(node => node.remove());
+    }
+    if (!path || !colorConsoleLogo && !showFolderBadge) return;
+    if (!consoleLogo) {
+      consoleLogo = {path, anchor: path.closest('a'), fill: path.style.getPropertyValue('fill'), priority: path.style.getPropertyPriority('fill')};
+      path.setAttribute(logoFillMarker, JSON.stringify({value: consoleLogo.fill, priority: consoleLogo.priority}));
+    }
+    const cloud = canScanIdentity() ? currentCloud() : null;
+    const current = cloud && activeCloud(cloud) ? cloud : null;
+    if (colorConsoleLogo && current) {
+      const color = itemColor(current);
+      const safeColor = typeof color === 'string' && !/[\\]|(?:url|var|env)\s*\(/i.test(color) && CSS.supports('color', color);
+      path.style.setProperty('fill', safeColor ? color : Core.color(current.id), 'important');
+    }
+    else if (consoleLogo.fill) path.style.setProperty('fill', consoleLogo.fill, consoleLogo.priority);
+    else path.style.removeProperty('fill');
+    const route = Core.route(location.href, location.origin);
+    const folder = showFolderBadge && current && route?.type === 'folder' && (!route.cloudId || route.cloudId === current.id) ? current.folders.find(item => item.id === route.id) : null;
+    if (!folder) {
+      consoleLogo.badgeRoot?.unmount(); consoleLogo.badge?.remove();
+      consoleLogo.badgeRoot = null; consoleLogo.badge = null;
+      if (consoleLogo.positionChanged) {
+        if (consoleLogo.position) consoleLogo.anchor.style.setProperty('position', consoleLogo.position.value, consoleLogo.position.priority);
+        else consoleLogo.anchor.style.removeProperty('position');
+        consoleLogo.anchor.removeAttribute(logoPositionMarker);
+        consoleLogo.positionChanged = false;
+      }
+      return;
+    }
+    const {anchor} = consoleLogo;
+    if (!consoleLogo.badge) {
+      if (getComputedStyle(anchor).position === 'static') {
+        consoleLogo.position = anchor.style.getPropertyValue('position') ? {value: anchor.style.getPropertyValue('position'), priority: anchor.style.getPropertyPriority('position')} : null;
+        anchor.setAttribute(logoPositionMarker, JSON.stringify({value: anchor.style.getPropertyValue('position'), priority: anchor.style.getPropertyPriority('position')}));
+        consoleLogo.positionChanged = true; anchor.style.position = 'relative';
+      }
+      const badge = document.createElement('span'); badge.dataset.ycpFolderBadge = ''; badge.setAttribute('aria-hidden', 'true');
+      const badgeShadow = badge.attachShadow({mode: 'open'});
+      anchor.append(badge); consoleLogo.badge = badge; consoleLogo.badgeRoot = createRoot(badgeShadow);
+    }
+    const bounds = path.closest('svg').getBoundingClientRect(), parent = anchor.getBoundingClientRect();
+    Object.assign(consoleLogo.badge.style, {left: `${bounds.right - parent.left - anchor.clientLeft - 5}px`, top: `${bounds.top - parent.top - anchor.clientTop - 4}px`, color: itemColor(folder, current)});
+    consoleLogo.badgeRoot.render(<Icon data={folderIcons[itemIconName(folder, current)]} size={14}/>);
   }
   function revealCurrentRoute() {
     const cloud = currentCloud();
@@ -1137,7 +1219,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     aside.style.setProperty('--ycp-width', `${panelWidth}px`);
   }
   function onResize() { applyWidth(); render(); }
-  function render() { if (root && !stopped) { revealCurrentRoute(); root.render(<Panel/>); queueExpandedFolders(); scheduleScans(); } }
+  function render() { updateConsoleLogo(); if (root && !stopped) { revealCurrentRoute(); root.render(<Panel/>); queueExpandedFolders(); scheduleScans(); } }
   function refreshTheme() {
     if (!aside) return;
     const computed = getComputedStyle(aside);
@@ -1170,7 +1252,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       const changed = records.some(record => {
         if (record.type === 'attributes') return record.target === tree || record.target === aside || record.target.matches(selector);
         if (record.target === aside) return true;
-        return [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element && (node.matches(selector) || node.querySelector(selector)));
+        return [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element && (node.matches(selector) || node.querySelector(selector) || node.matches(consoleLogoSelector) || node.querySelector(consoleLogoSelector)));
       });
       if (detached || changed) scheduleMount();
     });
@@ -1185,6 +1267,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     poll();
   }
   function mount() {
+    updateConsoleLogo();
     const nextTree = document.querySelector('.console-dashboard-layout__aside .cloud-tree-list-container');
     if (!nextTree) {
       if (tree || host || root) {
@@ -1224,6 +1307,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     setNativeVisibility(); decorateNative(); render();
   }
   function cleanup(discard = false) {
+    restoreConsoleLogo();
     if (discard) stopped = true;
     cancelStartupWait();
     clearTimeout(mountPoll); lifecycleObserver?.disconnect();
@@ -1251,6 +1335,11 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       const next = changes[layoutKey].newValue?.groupOrder;
       const order = Array.isArray(next) ? [...new Set(next.filter(id => typeof id === 'string'))] : [];
       if (JSON.stringify(order) !== JSON.stringify(groupOrder)) { clearCloudDrag(); groupOrder = order; render(); }
+    }
+    if (changes.colorConsoleLogo || changes.showFolderBadge) {
+      if (changes.colorConsoleLogo) colorConsoleLogo = changes.colorConsoleLogo.newValue === true;
+      if (changes.showFolderBadge) showFolderBadge = changes.showFolderBadge.newValue === true;
+      updateConsoleLogo();
     }
     if (changes.compactDensity) { compactDensity = changes.compactDensity.newValue === true; render(); }
     if (changes.hideSingleOrganization || changes.showPersonalOrganizations) {
@@ -1283,6 +1372,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       for (const [storedKey, settings] of Object.entries(storedPreferences)) {
         if (!Object.hasOwn(preferences, storedKey)) preferenceSync.receive(storedKey, settings);
       }
+      colorConsoleLogo = storedPreferences.colorConsoleLogo === true;
+      showFolderBadge = storedPreferences.showFolderBadge === true;
       compactDensity = storedPreferences.compactDensity === true;
       hideSingleOrganization = storedPreferences.hideSingleOrganization === true;
       showPersonalOrganizations = storedPreferences.showPersonalOrganizations === true;
@@ -1318,6 +1409,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['lang']});
     timer = setInterval(() => {
       syncIdentity();
+      updateConsoleLogo();
       const activeId = currentCloud()?.id || null;
       if (location.href !== lastUrl || activeId !== lastActiveCloudId) { lastUrl = location.href; lastActiveCloudId = activeId; syncOrganization(); initializeMine(); render(); decorateNative(); }
     }, 1000);

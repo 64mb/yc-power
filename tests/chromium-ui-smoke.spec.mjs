@@ -107,6 +107,8 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
                 domainHosts: ['https://console.yandex.cloud'],
                 cloudOnlyHosts: [],
                 compactDensity: false,
+                colorConsoleLogo: false,
+                showFolderBadge: false,
                 hideSingleOrganization: false,
                 showPersonalOrganizations: false,
             });

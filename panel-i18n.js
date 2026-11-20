@@ -40,7 +40,7 @@ const messages = {
     icon_folder: 'Каталог', icon_terminal: 'Терминал', icon_server: 'Сервер', icon_database: 'База данных', icon_briefcase: 'Рабочая область', icon_network: 'Сеть', icon_container: 'Контейнер', icon_git: 'Ветки Git', icon_cpu: 'Процессор', icon_security: 'Безопасность', icon_globe: 'Интернет', icon_key: 'Учетные данные', icon_rocket: 'Развертывание', icon_settings: 'Настройки', icon_disk: 'Хранилище', icon_archive: 'Архив', icon_monitoring: 'Мониторинг', icon_alerts: 'Уведомления', icon_testing: 'Тестирование', icon_bug: 'Отладка', icon_connection: 'Соединение', icon_layers: 'Окружения', icon_clock: 'Расписание', icon_code: 'Код',
     power: 'Power', material: 'Material',
     showMyClouds: 'Показать мои облака', mine: 'Мои облака', all: 'Все облака', refresh: 'Обновить облака',
-    showAllModern: 'Показывать все облака организации в этой панели', organizationUnknown: 'Организация не определена',
+    showAllModern: 'Показывать все облака организации', organizationUnknown: 'Организация не определена',
     native: 'Панель по умолчанию', back: 'Вернуться к моим облакам', add: 'Добавить в мои облака', remove: 'Убрать из моих облаков',
     folders: 'Каталоги в {name}', customize: 'Настроить {name}', customizeTitle: 'Подпись и цвет', customizeFolderTitle: 'Подпись, цвет и иконка',
     empty: 'Добавьте нужные облака кнопкой плюса в общем списке облаков', noFolders: 'Нет каталогов', refreshFolders: 'Обновить каталоги',
