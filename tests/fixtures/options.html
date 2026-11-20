@@ -8,7 +8,7 @@
 <script>
 const scenario = new URLSearchParams(location.search).get('scenario');
 const memory = JSON.parse(sessionStorage.getItem('options:' + scenario) || '{}');
-window.fixture = {memory, requests: [], writes: [], revocations: []};
+window.fixture = {memory, requests: [], writes: [], revocations: [], tabs: [], failWrites: false};
 window.browser = {
     i18n: {getUILanguage: () => 'en'},
     storage: {local: {
@@ -18,11 +18,15 @@ window.browser = {
             sessionStorage.setItem('options:' + scenario, JSON.stringify(memory));
         },
         set: async values => {
+            if (fixture.failWrites) throw new Error('Synthetic storage failure');
             fixture.writes.push(structuredClone(values));
             Object.assign(memory, structuredClone(values));
             sessionStorage.setItem('options:' + scenario, JSON.stringify(memory));
         },
     }},
+    extension: {getViews: () => scenario === 'options-popup' ? [window] : []},
+    runtime: {getURL: path => new URL(path, location.origin).href},
+    tabs: {create: async options => { fixture.tabs.push(structuredClone(options)); }},
     permissions: {
         request: async request => { fixture.requests.push(structuredClone(request)); return scenario !== 'options-denied'; },
         remove: async request => { fixture.revocations.push(structuredClone(request)); return true; },

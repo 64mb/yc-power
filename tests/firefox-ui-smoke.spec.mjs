@@ -120,7 +120,7 @@ async function exercise_options(driver, origin, scenario) {
   if (equal(scenario, "options-clouds-only")) {
     await driver.click('document.querySelectorAll(".domain-folder-toggle")[1]');
   }
-  await driver.click('document.querySelector("button[type=submit]")');
+  await driver.page.getByRole('button', {name: 'Save', exact: true}).click();
   await driver.wait('return !!document.querySelector("[role=status]")&&!document.querySelector("button[type=submit]").disabled;');
   expected = ["https://console.yandex.cloud", "https://alpha.example", "https://beta.example"];
   assert.ok(equal(await driver.evaluate("return fixture.requests;"), [{ "origins": expected.map((host) => host + "/*") }]));
@@ -770,6 +770,10 @@ const initialTransferSettings = {
   domainHosts: ['https://console.yandex.cloud', 'https://alpha.example'],
   cloudOnlyHosts: [],
   compactDensity: false,
+  hideSingleOrganization: false,
+  showPersonalOrganizations: false,
+  colorConsoleLogo: false,
+  showFolderBadge: false,
   [transferOrganizationKey]: {
     mine: ['cloud-alpha'], initialized: true, expandedClouds: ['cloud-alpha'], width: 320,
     custom: {'cloud:cloud-alpha': {label: 'Original alpha', color: 'blue', icon: 'rocket'}},
@@ -828,8 +832,14 @@ for (const denied of [false, true]) {
 
     await page.getByRole('button', {name: 'Save', exact: true}).click();
     await expect(page.getByRole('status')).toHaveText(denied ? 'Access was not granted. Settings have not changed' : 'Saved. The extension is enabled for the selected addresses');
+    await expect(page.getByRole('status')).toHaveCSS('font-size', '14px');
     expect(await page.evaluate(() => fixture.requests)).toEqual([{origins: imported.settings.domainHosts.map(host => host + '/*')}]);
     if (denied) {
+      expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
+      expect(await page.evaluate(() => fixture.writes)).toEqual([]);
+      await expect(page.getByRole('button', {name: 'Save', exact: true})).toBeEnabled();
+      await page.getByRole('button', {name: 'Save', exact: true}).click();
+      await expect.poll(() => page.evaluate(() => fixture.requests.length)).toBe(2);
       expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
       expect(await page.evaluate(() => fixture.writes)).toEqual([]);
     } else {
@@ -854,3 +864,78 @@ for (const denied of [false, true]) {
     }
   });
 }
+
+async function uploadSettings(page, settings) {
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'synthetic-settings.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({format: 'yc-power-settings', version: 1, settings})),
+  });
+}
+
+test('import stages all settings until Save and preserves subsequent form edits', async ({page}) => {
+  await openTransferFixture(page, 'options-staged');
+  const settings = structuredClone(initialTransferSettings);
+  settings.compactDensity = true;
+  settings.colorConsoleLogo = true;
+  settings.showFolderBadge = true;
+  settings[transferOrganizationKey].custom['cloud:cloud-alpha'].label = 'Staged import';
+  await uploadSettings(page, settings);
+  await expect(page.getByRole('status')).toHaveText('Settings loaded from JSON. Save to apply them');
+  expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
+  expect(await page.evaluate(() => fixture.writes)).toEqual([]);
+  expect(await page.evaluate(() => fixture.requests)).toEqual([]);
+  await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
+  await expect(page.getByRole('checkbox', {name: 'Color the console logo by cloud', exact: true})).toBeChecked();
+  await expect(page.getByRole('checkbox', {name: 'Show the folder icon on the console logo', exact: true})).toBeChecked();
+  expect((await downloadSettings(page)).settings).toEqual(initialTransferSettings);
+  await page.getByRole('checkbox', {name: 'Show the folder icon on the console logo', exact: true}).uncheck();
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByRole('status')).toHaveText('Saved. The extension is enabled for the selected addresses');
+  const expected = {...settings, showFolderBadge: false};
+  expect(await page.evaluate(() => fixture.memory)).toEqual(expected);
+  expect(await page.evaluate(() => fixture.writes)).toEqual([expected]);
+  expect((await downloadSettings(page)).settings).toEqual(expected);
+});
+
+test('invalid JSON preserves the form and a failed Save retains the staged import for retry', async ({page}) => {
+  await openTransferFixture(page, 'options-import-failure');
+  await page.locator('input[type=file]').setInputFiles({name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{')});
+  await expect(page.getByRole('status')).toHaveText('Could not import settings: choose a valid YC Power JSON file');
+  await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).not.toBeChecked();
+  await expect(page.locator('.domain-row input')).toHaveCount(2);
+  expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
+  await expect(page.getByRole('button', {name: 'Import settings', exact: true})).toBeEnabled();
+  await page.reload();
+  await expect(page.locator('.domain-row input').first()).toBeEnabled();
+  const settings = structuredClone(initialTransferSettings);
+  Object.assign(settings, {compactDensity: true, colorConsoleLogo: true, showFolderBadge: true});
+  settings[transferOrganizationKey].custom['cloud:cloud-alpha'].label = 'Retry import';
+  await page.evaluate(() => { fixture.failWrites = true; });
+  await uploadSettings(page, settings);
+  await expect(page.getByRole('status')).toHaveText('Settings loaded from JSON. Save to apply them');
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByRole('status')).toHaveText('Could not save settings. Please try again');
+  await expect(page.getByRole('button', {name: 'Import settings', exact: true})).toBeEnabled();
+  await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
+  expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
+  await page.evaluate(() => { fixture.failWrites = false; });
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByRole('status')).toHaveText('Saved. The extension is enabled for the selected addresses');
+  expect(await page.evaluate(() => fixture.memory)).toEqual(settings);
+});
+
+test('popup import opens a persistent options tab without opening a file chooser', async ({page}) => {
+  await page.goto('/tests/fixtures/options.html?scenario=options-popup');
+  const choosers = [];
+  page.on('filechooser', chooser => choosers.push(chooser));
+  await page.getByRole('button', {name: 'Import settings', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => fixture.tabs)).toEqual([{url: new URL('/options.html?import=1', page.url()).href}]);
+  expect(choosers).toHaveLength(0);
+  expect(await page.evaluate(() => fixture.writes)).toEqual([]);
+  await page.goto('/tests/fixtures/options.html?scenario=options-import-tab&import=1');
+  await expect(page.getByRole('status')).toHaveText('Choose a JSON file to import, then click Save to apply settings');
+  await expect(page.getByRole('status')).toHaveCSS('font-size', '14px');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', {name: 'Import settings', exact: true}).click();
+  await (await chooser).setFiles([]);
+});

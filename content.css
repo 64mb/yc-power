@@ -34,3 +34,11 @@
 [data-ycp-aside] [data-list-item]:hover .ycp-add-native,
 [data-ycp-aside] [data-list-item]:focus-within .ycp-add-native,
 [data-ycp-aside] .ycp-add-native:focus-visible { opacity: 1; pointer-events: auto; }
+[data-ycp-folder-badge] {
+  position: absolute;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 1;
+}

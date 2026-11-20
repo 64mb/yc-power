@@ -30,14 +30,17 @@ function Settings() {
     const [compactDensity, setCompactDensity] = useState(false);
     const [hideSingleOrganization, setHideSingleOrganization] = useState(false);
     const [showPersonalOrganizations, setShowPersonalOrganizations] = useState(false);
+    const [colorConsoleLogo, setColorConsoleLogo] = useState(false);
+    const [showFolderBadge, setShowFolderBadge] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
     const [imported, setImported] = useState(null);
     const [resetOpen, setResetOpen] = useState(false);
     const importInput = useRef(null);
+    const busy = useRef(false);
     useEffect(() => {
-        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts', 'hideSingleOrganization', 'showPersonalOrganizations']).then((stored) => {
+        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge']).then((stored) => {
             const disabledHosts = new Set((Array.isArray(stored.cloudOnlyHosts) ? stored.cloudOnlyHosts : []).flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }));
@@ -49,6 +52,9 @@ function Settings() {
             setCompactDensity(stored.compactDensity === true);
             setHideSingleOrganization(stored.hideSingleOrganization === true);
             setShowPersonalOrganizations(stored.showPersonalOrganizations === true);
+            setColorConsoleLogo(stored.colorConsoleLogo === true);
+            setShowFolderBadge(stored.showFolderBadge === true);
+            if (new URLSearchParams(location.search).has('import')) setStatus({theme: 'info', message: t.importChoose});
             setLoading(false);
         }).catch(() => {
             setStatus({theme: 'danger', message: t.loadFailed});
@@ -63,10 +69,47 @@ function Settings() {
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch { setStatus({theme: 'danger', message: t.exportFailed}); }
     }
+    function chooseImport() {
+        if (browser.extension?.getViews?.({type: 'popup'}).includes(window)) {
+            browser.tabs.create({url: browser.runtime.getURL('options.html?import=1')}).catch(() => {
+                setStatus({theme: 'danger', message: t.importFailed});
+            });
+            return;
+        }
+        importInput.current.click();
+    }
+    async function persistSettings(settings) {
+        const stored = await browser.storage.local.get('domainHosts');
+        const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
+        const applied = {...settings,
+            hideSingleOrganization: settings.hideSingleOrganization === true,
+            showPersonalOrganizations: settings.showPersonalOrganizations === true,
+            colorConsoleLogo: settings.colorConsoleLogo === true,
+            showFolderBadge: settings.showFolderBadge === true,
+        };
+        await browser.storage.local.set(applied);
+        const manifest = browser.runtime?.getManifest?.() || {};
+        const requiredOrigins = [...(manifest.host_permissions || []), ...(manifest.permissions || [])];
+        const removed = previous.flatMap(host => {
+            try { return [normalizeHost(host)]; } catch { return []; }
+        }).filter(host => !applied.domainHosts.includes(host) && !DEFAULT_HOSTS.includes(host) && !requiredOrigins.includes(host + '/*'));
+        if (removed.length) await browser.permissions.remove({origins: removed.map(host => host + '/*')});
+        setHosts(applied.domainHosts.map(host => ({host, cloudOnly: applied.cloudOnlyHosts.includes(host)})));
+        setCompactDensity(applied.compactDensity);
+        setHideSingleOrganization(applied.hideSingleOrganization);
+        setShowPersonalOrganizations(applied.showPersonalOrganizations);
+        setColorConsoleLogo(applied.colorConsoleLogo);
+        setShowFolderBadge(applied.showFolderBadge);
+        setImported(null);
+        setStatus({theme: 'success', message: applied.domainHosts.length ? t.saved : t.disabled});
+    }
     async function importSettings(event) {
         const file = event.target.files?.[0];
         event.target.value = '';
-        if (!file) return;
+        if (!file || busy.current) return;
+        busy.current = true;
+        setSaving(true);
+        setStatus(null);
         try {
             if (file.size > Transfer.MAX_BYTES) throw new Error('File too large');
             const settings = Transfer.parseSettings(await file.text());
@@ -75,11 +118,18 @@ function Settings() {
             setCompactDensity(settings.compactDensity);
             setHideSingleOrganization(settings.hideSingleOrganization === true);
             setShowPersonalOrganizations(settings.showPersonalOrganizations === true);
+            setColorConsoleLogo(settings.colorConsoleLogo === true);
+            setShowFolderBadge(settings.showFolderBadge === true);
             setStatus({theme: 'success', message: t.importReady});
         } catch { setStatus({theme: 'danger', message: t.importFailed}); }
+        finally {
+            busy.current = false;
+            setSaving(false);
+        }
     }
     async function resetSettings() {
-        if (saving) return;
+        if (busy.current) return;
+        busy.current = true;
         setSaving(true);
         setStatus(null);
         try {
@@ -92,6 +142,8 @@ function Settings() {
                 compactDensity: false,
                 hideSingleOrganization: false,
                 showPersonalOrganizations: false,
+                colorConsoleLogo: false,
+                showFolderBadge: false,
             };
             // publish the reset marker before removing data so content scripts discard pending writes
             await browser.storage.local.set(defaults);
@@ -103,6 +155,8 @@ function Settings() {
             setCompactDensity(false);
             setHideSingleOrganization(false);
             setShowPersonalOrganizations(false);
+            setColorConsoleLogo(false);
+            setShowFolderBadge(false);
             setImported(null);
             if (importInput.current) importInput.current.value = '';
             const manifest = browser.runtime?.getManifest?.() || {};
@@ -116,11 +170,13 @@ function Settings() {
             setStatus({theme: 'danger', message: t.resetFailed});
         } finally {
             setResetOpen(false);
+            busy.current = false;
             setSaving(false);
         }
     }
     async function save(event) {
         event.preventDefault();
+        if (busy.current) return;
         try {
             const rows = new Map();
             for (const row of hosts) {
@@ -132,24 +188,16 @@ function Settings() {
             const cloudOnlyHosts = [...rows.values()].filter((row) => row.cloudOnly).map((row) => row.host);
             // request permissions directly from the save gesture
             const request = next.length ? browser.permissions.request({origins: next.map((host) => host + '/*')}) : Promise.resolve(true);
+            busy.current = true;
             setSaving(true);
             if (!await request) {
                 setStatus({theme: 'warning', message: t.denied});
                 return;
             }
-            const stored = await browser.storage.local.get('domainHosts');
-            const previous = Array.isArray(stored.domainHosts) ? stored.domainHosts : DEFAULT_HOSTS;
-            await browser.storage.local.set({...imported, domainHosts: next, compactDensity, cloudOnlyHosts, hideSingleOrganization, showPersonalOrganizations});
-            setImported(null);
-            const removed = previous.flatMap((host) => {
-                try { return [normalizeHost(host)]; } catch { return []; }
-            }).filter((host) => !next.includes(host) && !DEFAULT_HOSTS.includes(host));
-            if (removed.length) await browser.permissions.remove({origins: removed.map((host) => host + '/*')});
-            setHosts([...rows.values()]);
-            setStatus({theme: 'success', message: next.length ? t.saved : t.disabled});
+            await persistSettings({...imported, domainHosts: next, compactDensity, cloudOnlyHosts, hideSingleOrganization, showPersonalOrganizations, colorConsoleLogo, showFolderBadge});
         } catch (error) {
             setStatus({theme: 'danger', message: error instanceof HostError ? error.message : t.saveFailed});
-        } finally { setSaving(false); }
+        } finally { busy.current = false; setSaving(false); }
     }
     return <main className="settings">
         <header className="settings-heading">
@@ -189,14 +237,20 @@ function Settings() {
                     <Checkbox size="m" checked={showPersonalOrganizations} onUpdate={setShowPersonalOrganizations} disabled={loading || saving}
                         controlProps={{'aria-describedby': 'show-personal-organizations-hint'}}>{t.showPersonalOrganizations}</Checkbox>
                     <Text as="p" variant="body-1" color="secondary" id="show-personal-organizations-hint">{t.showPersonalOrganizationsHint}</Text>
+                    <Checkbox size="m" checked={colorConsoleLogo} onUpdate={setColorConsoleLogo} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'color-console-logo-hint'}}>{t.colorConsoleLogo}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="color-console-logo-hint">{t.colorConsoleLogoHint}</Text>
+                    <Checkbox size="m" checked={showFolderBadge} onUpdate={setShowFolderBadge} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'show-folder-badge-hint'}}>{t.showFolderBadge}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="show-folder-badge-hint">{t.showFolderBadgeHint}</Text>
                 </section>
                 <input ref={importInput} type="file" accept="application/json,.json" hidden onChange={importSettings}/>
                 <div className="settings-transfer">
                     <Button view="outlined" disabled={loading || saving} onClick={exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
-                    <Button view="outlined" disabled={loading || saving} onClick={() => importInput.current.click()}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
+                    <Button view="outlined" disabled={loading || saving} onClick={chooseImport}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
                 </div>
                 <Button className="settings-reset" view="outlined-danger" disabled={loading || saving} onClick={() => setResetOpen(true)}><Icon data={TrashBin} size={16}/>{t.resetSettings}</Button>
-                <div className="settings-actions">{status && <Text className="settings-status" variant="caption-1" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
+                <div className="settings-actions">{status && <Text className="settings-status" variant="body-2" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>
         <Dialog open={resetOpen} onClose={() => { if (!saving) setResetOpen(false); }} initialFocus="cancel"

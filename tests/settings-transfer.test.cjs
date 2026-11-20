@@ -166,15 +166,15 @@ test('imports version one preferences and profiles without appearance unchanged'
   assert.deepEqual(imported[profileKey], stored[profileKey]);
 });
 
-test('round trips optional organization visibility flags without adding missing flags', () => {
+test('round trips optional global flags without adding missing flags', () => {
   const defaults = {domainHosts: [publicOrigin], cloudOnlyHosts: [], compactDensity: false};
   assert.deepEqual(parseSettings(envelope({})), defaults);
   assert.deepEqual(JSON.parse(exportSettings({})).settings, defaults);
-  for (const key of ['hideSingleOrganization', 'showPersonalOrganizations']) {
+  for (const key of ['hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge']) {
     for (const value of [true, false]) {
       assert.deepEqual(parseSettings(exportSettings({[key]: value})), {...defaults, [key]: value});
     }
-    for (const value of [null, 0, 1, 'true', [], {}]) {
+    for (const value of [null, 0, 1, 'true', 'false', [], {}]) {
       assert.throws(() => parseSettings(envelope({[key]: value})), /Invalid settings file/);
       assert.throws(() => exportSettings({[key]: value}), /Invalid settings file/);
     }

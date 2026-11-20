@@ -76,7 +76,7 @@
     for (const [key, value] of Object.entries(stored)) {
       if (key === 'domainHosts' || key === 'cloudOnlyHosts') {
         result[key] = [...new Set(strings(value).map(origin))];
-      } else if (['compactDensity', 'hideSingleOrganization', 'showPersonalOrganizations'].includes(key)) {
+      } else if (['compactDensity', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge'].includes(key)) {
         if (typeof value !== 'boolean') fail();
         result[key] = value;
       } else if (key.startsWith('yc-power:')) {
