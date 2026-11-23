@@ -46,7 +46,7 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
         assert.equal(await page.locator('.domain-folder-toggle').nth(1).evaluate((button) => button.classList.contains('g-button_view_outlined-info')), true);
 
         const downloadPromise = page.waitForEvent('download');
-        await page.getByRole('button', {name: 'Export settings', exact: true}).click();
+        await page.getByRole('button', {name: 'Export', exact: true}).click();
         const download = await downloadPromise;
         const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
         assert.equal(exported.format, 'yc-power-settings');
@@ -62,8 +62,8 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
         await page.reload();
         await page.waitForFunction(() => document.querySelector('input[type=checkbox]')?.checked);
         await page.waitForFunction(() => !document.querySelector('.domain-row input').disabled);
-        assert.equal(await page.getByRole('button', {name: 'Export settings', exact: true}).isEnabled(), true);
-        assert.equal(await page.getByRole('button', {name: 'Import settings', exact: true}).isEnabled(), true);
+        assert.equal(await page.getByRole('button', {name: 'Export', exact: true}).isEnabled(), true);
+        assert.equal(await page.getByRole('button', {name: 'Import', exact: true}).isEnabled(), true);
         await page.waitForFunction(async () => (await chrome.scripting.getRegisteredContentScripts()).some((script) => script.matches.includes('https://beta.example/*')));
         for (const colorScheme of ['light', 'dark']) {
             await page.emulateMedia({colorScheme});
@@ -94,8 +94,8 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
         assert.equal(await page.locator('[data-ycp-host]').count(), 1);
         const resetPage = await context.newPage();
         await resetPage.goto(extensionOrigin + '/options.html');
-        await resetPage.getByRole('button', {name: 'Reset all settings', exact: true}).click();
-        await resetPage.getByRole('dialog').getByRole('button', {name: 'Reset all settings', exact: true}).click();
+        await resetPage.getByRole('button', {name: 'Reset all', exact: true}).click();
+        await resetPage.getByRole('dialog').getByRole('button', {name: 'Reset all', exact: true}).click();
         await resetPage.getByRole('status').filter({hasText: 'All settings have been reset. Reload the console pages'}).waitFor();
         await page.waitForFunction(() => !document.querySelector('[data-ycp-host], .ycp-add-native'));
         const assertResetStorage = async () => {
@@ -109,6 +109,7 @@ test('installed MV3 extension saves settings, transfers preferences and injects 
                 compactDensity: false,
                 colorConsoleLogo: false,
                 showFolderBadge: false,
+                useSessionContainers: false,
                 hideSingleOrganization: false,
                 showPersonalOrganizations: false,
             });

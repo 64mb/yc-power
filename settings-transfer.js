@@ -76,7 +76,7 @@
     for (const [key, value] of Object.entries(stored)) {
       if (key === 'domainHosts' || key === 'cloudOnlyHosts') {
         result[key] = [...new Set(strings(value).map(origin))];
-      } else if (['compactDensity', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge'].includes(key)) {
+      } else if (['compactDensity', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge', 'useSessionContainers'].includes(key)) {
         if (typeof value !== 'boolean') fail();
         result[key] = value;
       } else if (key.startsWith('yc-power:')) {
@@ -101,7 +101,7 @@
           result[key] = {name: value.name};
           if ('appearance' in value) result[key].appearance = appearance(value.appearance);
           if ('subjectId' in value) {
-            if (!Federation.validSubjectId(value.subjectId)) fail();
+            if (!Federation.validSubjectId(value.subjectId) || scope.subjectId && value.subjectId !== scope.subjectId) fail();
             result[key].subjectId = value.subjectId;
           }
         } else if (isCatalog) {

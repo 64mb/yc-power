@@ -13,3 +13,5 @@ You can export settings and the local navigation cache to a JSON file and import
 The default permission covers only `https://console.yandex.cloud`. Additional HTTPS origins require the browser's permission when you save them. Removing a custom origin revokes its optional permission. An empty list disables the extension everywhere.
 
 The sidebar follows the console language. Extension settings use the browser interface language, then the system language, with English as the fallback. Russian and English are supported.
+
+The Firefox build declares `contextualIdentities`, which enables Firefox container support at the browser level. YC Power uses containers only when its setting is enabled. Enabling the setting requests the optional `cookies` permission, which Firefox requires to open tabs in separate browser-managed sessions. YC Power does not read, copy, or export authentication cookies. Container associations are stored locally and excluded from exported settings. Disabling or resetting the option does not delete existing browser containers or their sessions.

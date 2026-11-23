@@ -38,7 +38,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Enable compact mode in extension settings to reduce row height and spacing
 - Export settings as two-space-indented JSON and import them across browsers; review imported settings in the form and select **Save** to apply them and grant access to new console addresses
 - Import from a persistent settings page so choosing a file does not close an extension popup mid-operation
-- Optionally color the native console logo by the current cloud and show the current folder icon at its upper-right corner
+- Optionally color the native console logo and browser tab icon by the current federation or personal account, and show the current folder icon at the upper-right corner of the console logo
 - Reset all settings from the extension settings page after confirmation
 - Follow the console's Gravity theme and font, including light and dark themes
 - Use Russian or English according to the console language; extension settings follow the browser language, with English as the fallback
@@ -89,3 +89,9 @@ The Chromium build uses a Manifest V3 service worker and persistent content scri
 ## Install for development
 
 Open `about:debugging#/runtime/this-firefox` in Firefox or Zen, choose "Load Temporary Add-on", and select the XPI or `manifest.json`. A temporary add-on is removed when the browser restarts.
+
+Firefox can optionally open console resources in isolated account containers. Enable **Open console sessions in Firefox containers** in extension settings and save to grant the container permissions. Each console address and federation gets its own container, and personal accounts are separated by account identity. Sign in once in each new container; existing browser sessions are not copied. Chromium keeps the current navigation behavior and does not show this option. Container cookies and local container IDs are excluded from settings exports. Disabling the option keeps existing containers and their sessions intact.
+
+Private Firefox windows keep standard navigation because Firefox containers are unavailable in private browsing.
+
+Firefox container colors follow the federation or personal account color selected in YC Power. Firefox uses a fixed container palette, so YC Power chooses the closest supported shade and updates existing containers when that preference changes.

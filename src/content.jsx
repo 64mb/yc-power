@@ -23,16 +23,21 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   const readIdentity = () => Federation.identityFromScripts([...document.scripts].filter(script => !script.src).map(script => script.textContent));
   let identity = readIdentity();
   let federationId = identity?.id || null;
-  const scopeKey = (organizationId, id = federationId) => Federation.scopeKey(location.origin, organizationId, id);
+  let useSessionContainers = false, managedContainer = false;
+  const scopePassportAccounts = () => useSessionContainers || managedContainer;
+  const passportSubject = () => scopePassportAccounts() && federationId === null ? identity?.subjectId || null : null;
+  const scopeKey = (organizationId, id = federationId, subject = passportSubject()) => Federation.scopeKey(location.origin, organizationId, id, subject);
+  const cloudSubject = cloud => Object.hasOwn(cloud, 'subjectId') ? cloud.subjectId : passportSubject();
+  const cloudScope = cloud => scopeKey(cloud.organizationId, cloudFederation(cloud), cloudSubject(cloud));
   const cloudFederation = cloud => Object.hasOwn(cloud, 'federationId') ? cloud.federationId : federationId;
-  const activeCloud = cloud => cloudFederation(cloud) === federationId;
-  const organizationGroupKey = (id, federation = federationId) => federation ? Federation.identityKey(federation, id || '') : id || '';
+  const activeCloud = cloud => cloudFederation(cloud) === federationId && (federationId !== null || cloudSubject(cloud) === passportSubject());
+  const organizationGroupKey = (id, federation = federationId, subject = passportSubject()) => federation || subject ? Federation.identityKey(federation || `passport:${subject}`, id || '') : id || '';
   const canScanIdentity = () => {
     const current = readIdentity();
     if ((current?.id || null) !== federationId || Boolean(current) !== Boolean(identity) || current?.subjectId !== identity?.subjectId) return false;
     return Boolean(identity) || !Object.keys(preferences).some(savedKey => {
       const scope = Federation.parseKey(savedKey);
-      return scope?.origin === location.origin && ((scope.federationId !== null && scope.kind === 'catalog') || scope.kind === 'passport-catalog');
+      return scope?.origin === location.origin && ((scope.federationId !== null && scope.kind === 'catalog') || (scope.kind === 'passport-catalog' && (!scope.subjectId || scopePassportAccounts())));
     });
   };
   let organization = null, key = scopeKey(null), preferences = {};
@@ -57,9 +62,10 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   const personalMode = () => identity !== null && federationId === null;
   function activeCatalog() {
     if (!identity && !canScanIdentity()) return [];
-    const passportSubject = preferences[Federation.passportProfileKey(location.origin)]?.subjectId;
-    if (personalMode() && identity.subjectId && passportSubject !== identity.subjectId) return [];
-    return Core.catalogCache(preferences[personalMode() ? Federation.passportCatalogKey(location.origin) : catalogKey], location.origin);
+    const subject = passportSubject();
+    const legacySubject = preferences[Federation.passportProfileKey(location.origin)]?.subjectId;
+    if (personalMode() && !subject && identity.subjectId && legacySubject !== identity.subjectId) return [];
+    return Core.catalogCache(preferences[personalMode() ? Federation.passportCatalogKey(location.origin, subject) : catalogKey], location.origin);
   }
   const expanded = new Set();
   let revealedRoute = null, observedRouteTransition = null, lastActiveCloudId = null;
@@ -147,7 +153,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     window.addEventListener('blur', session.cancel);
   }
   function orderedInactiveGroups() {
-    const ids = [...new Set(cachedGroups().map(group => federationGroupKey(group.federationId)))];
+    const ids = [...new Set(cachedGroups().map(group => federationGroupKey(group.federationId, group.subjectId)))];
     return [...groupOrder.filter(id => ids.includes(id)), ...ids.filter(id => !groupOrder.includes(id))];
   }
   function moveGroup(source, target, after = false) {
@@ -243,16 +249,22 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function cachedGroups() {
     return Federation.catalogGroups(preferences, location.origin, Core.catalogCache)
-      .filter(group => group.federationId !== federationId && (group.federationId === null
-        ? showPersonalOrganizations && group.key === Federation.passportCatalogKey(location.origin)
-        : !personalMode() || showPersonalOrganizations))
+      .filter(group => {
+        if (group.federationId !== null) return group.federationId !== federationId && (!personalMode() || showPersonalOrganizations);
+        if (!showPersonalOrganizations || group.key !== Federation.passportCatalogKey(location.origin, group.subjectId)) return false;
+        if (group.subjectId) return scopePassportAccounts() && group.subjectId !== passportSubject();
+        const legacySubject = preferences[Federation.passportProfileKey(location.origin)]?.subjectId;
+        if (personalMode() && (!scopePassportAccounts() || !legacySubject || legacySubject === passportSubject())) return false;
+        return !scopePassportAccounts() || !legacySubject || !Object.hasOwn(preferences, Federation.passportCatalogKey(location.origin, legacySubject));
+      })
       .flatMap(group => {
         const organizations = new Map();
+        const subjectId = group.subjectId ?? null;
         for (const item of group.catalog) {
-          const cloud = {...item, federationId: group.federationId, folders: item.folders.map(folder => ({...folder, federationId: group.federationId}))};
+          const cloud = {...item, federationId: group.federationId, subjectId, folders: item.folders.map(folder => ({...folder, federationId: group.federationId, subjectId}))};
           if (!cloudSettings(cloud).mine.includes(cloud.id)) continue;
-          const id = organizationGroupKey(cloud.organizationId, group.federationId);
-          if (!organizations.has(id)) organizations.set(id, {id, federationId: group.federationId, name: cloud.organizationName || t('unknownOrganization'), clouds: []});
+          const id = organizationGroupKey(cloud.organizationId, group.federationId, subjectId);
+          if (!organizations.has(id)) organizations.set(id, {id, federationId: group.federationId, subjectId, name: cloud.organizationName || t('unknownOrganization'), clouds: []});
           organizations.get(id).clouds.push(cloud);
         }
         return [...organizations.values()].map(organization => ({...organization, clouds: cloudSettings(organization.clouds[0]).mine.map(id => organization.clouds.find(cloud => cloud.id === id)).filter(Boolean)}));
@@ -263,16 +275,12 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     const catalog = id === federationId ? state.clouds : Core.catalogCache(preferences[Federation.catalogKey(location.origin, id)], location.origin);
     return new Set(catalog.map(cloud => cloud.organizationId || '')).size === 1;
   }
-  function federationName(id) {
-    const profile = preferences[id === null ? Federation.passportProfileKey(location.origin) : Federation.profileKey(location.origin, id)];
-    return profile?.appearance?.label || profile?.name || (id === null ? t('passportAccount') : id);
-  }
   const groupColor = appearance => appearance?.color || 'var(--g-color-text-secondary)';
   function organizationSettings(group) {
     return group.clouds[0] ? cloudSettings(group.clouds[0]) : state;
   }
-  function GroupAction({type, id, name, cloud}) {
-    const targetKey = type === 'passport' ? Federation.passportProfileKey(location.origin) : type === 'federation' ? Federation.profileKey(location.origin, id) : cloud ? scopeKey(cloud.organizationId, cloudFederation(cloud)) : key;
+  function GroupAction({type, id, subject, name, cloud}) {
+    const targetKey = type === 'passport' ? Federation.passportProfileKey(location.origin, subject) : type === 'federation' ? Federation.profileKey(location.origin, id) : cloud ? cloudScope(cloud) : key;
     return <Button className="ycp-group-action" view="flat-secondary" size="s" aria-label={t(type === 'passport' ? 'customizePassport' : type === 'federation' ? 'customizeFederation' : 'customizeOrganization', {name})} aria-expanded={edit?.groupKey === targetKey} data-ycp-tooltip={t('customizeTitle')} onClick={event => { event.stopPropagation(); customizeGroup(type, targetKey, name); }}><Icon data={Ellipsis} size={16}/></Button>;
   }
   function toggleGroup(id) {
@@ -297,11 +305,12 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       <GroupAction type="organization" name={group.name} cloud={group.clouds[0]}/>
     </div>;
   }
-  function federationGroupKey(id) { return id === null ? 'account:passport' : `federation:${id}`; }
-  function FederationHeading({id, cached = false, cloudCount = 0}) {
-    const groupKey = federationGroupKey(id), name = federationName(id);
-    const profile = preferences[id === null ? Federation.passportProfileKey(location.origin) : Federation.profileKey(location.origin, id)];
+  function federationGroupKey(id, subject) { return id === null ? (subject ? `account:passport:${subject}` : 'account:passport') : `federation:${id}`; }
+  function FederationHeading({id, subject, cached = false, cloudCount = 0}) {
+    const groupKey = federationGroupKey(id, subject);
+    const profile = preferences[id === null ? Federation.passportProfileKey(location.origin, subject) : Federation.profileKey(location.origin, id)];
     const originalName = profile?.name || (id === null ? t('passportAccount') : id);
+    const name = profile?.appearance?.label || originalName;
     return <div className="ycp-organization-row ycp-federation-row" data-federation-id={id ?? undefined} data-passport-heading={id === null || undefined} data-group-reorderable={cached || undefined} tabIndex={cached ? 0 : undefined} role={cached ? 'group' : undefined} aria-label={cached ? name : undefined} onPointerDown={cached ? event => beginGroupDrag(event, groupKey) : undefined} onKeyDown={cached ? event => {
       if (event.target !== event.currentTarget || !event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault();
@@ -317,7 +326,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       <span className="ycp-group-icon" style={{color: groupColor(profile?.appearance)}}><Icon data={id === null ? Person : PersonsLock} size={16}/><ActiveDot active={!cached && identity !== null}/></span>
       <Text variant="body-1" data-ycp-tooltip={cached ? `${originalName}\n${t('cachedFederation')}` : originalName}>{name}</Text>
       {(id === null || hideOrganizationLevel(id)) ? <Text className="ycp-group-count" variant="caption-2" color="secondary">{cloudCount}</Text> : <span/>}
-      <GroupAction type={id === null ? "passport" : "federation"} id={id} name={originalName}/>
+      <GroupAction type={id === null ? "passport" : "federation"} id={id} subject={subject} name={originalName}/>
     </div>;
   }
   function CachedOrganization({group, hidden = false, passport = false}) {
@@ -330,20 +339,20 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       </section>)}
     </div>;
   }
-  function PassportLevel({enabled = true, cached = false, cloudCount = 0, children}) {
+  function PassportLevel({enabled = true, subject = passportSubject(), cached = false, cloudCount = 0, children}) {
     if (!enabled) return children;
-    const id = federationGroupKey(null);
+    const id = federationGroupKey(null, subject);
     return <div className="ycp-federation ycp-passport-account" data-passport-account data-group-order-key={cached ? id : undefined}>
-      <FederationHeading id={null} cached={cached} cloudCount={cloudCount}/>
+      <FederationHeading id={null} subject={subject} cached={cached} cloudCount={cloudCount}/>
       {!collapsedOrganizations.has(id) && children}
     </div>;
   }
   function CachedFederations({groups}) {
     return orderedInactiveGroups().map(groupKey => {
-      const selected = groups.filter(group => federationGroupKey(group.federationId) === groupKey);
+      const selected = groups.filter(group => federationGroupKey(group.federationId, group.subjectId) === groupKey);
       const id = selected[0]?.federationId;
       const cloudCount = selected.reduce((sum, group) => sum + group.clouds.length, 0);
-      if (id === null) return <PassportLevel key={groupKey} cached cloudCount={cloudCount}>{selected.map(group => <CachedOrganization key={group.id} group={group} passport/>)}</PassportLevel>;
+      if (id === null) return <PassportLevel key={groupKey} subject={selected[0]?.subjectId ?? null} cached cloudCount={cloudCount}>{selected.map(group => <CachedOrganization key={group.id} group={group} passport/>)}</PassportLevel>;
       return <div key={groupKey} className="ycp-federation" data-cached-federation={id} data-group-order-key={groupKey}>
         <FederationHeading id={id} cached cloudCount={cloudCount}/>
         {!collapsedOrganizations.has(groupKey) && selected.map(group => <CachedOrganization key={group.id} group={group} hidden={hideOrganizationLevel(id)}/>)}
@@ -363,7 +372,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     render();
   }
   function updateCloudSettings(cloud, update) {
-    const cloudKey = scopeKey(cloud.organizationId, cloudFederation(cloud));
+    const cloudKey = cloudScope(cloud);
     if (cloudKey === key) { update(state); save(true); return; }
     const settings = structuredClone(cloudSettings(cloud));
     update(settings);
@@ -429,7 +438,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   function rememberExpanded(cloudId) {
     const cloud = state.clouds.find(cloud => cloud.id === cloudId);
     const keep = settings => [...expanded].filter(id => settings.mine.includes(id) || state.clouds.some(item => item.id === id && (item.organizationId || null) === (cloud?.organizationId || organization?.id || null)));
-    if (!cloud || scopeKey(cloud.organizationId, cloudFederation(cloud)) === key) { state.expandedClouds = keep(state); return; }
+    if (!cloud || cloudScope(cloud) === key) { state.expandedClouds = keep(state); return; }
     updateCloudSettings(cloud, settings => { settings.expandedClouds = keep(settings); });
   }
   function currentCloud() {
@@ -442,6 +451,48 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   const consoleLogoSelector = 'svg[viewBox="0 0 32 32"] path[d^="M23.858 27.411c-2.813 1.925"]';
   const logoFillMarker = 'data-ycp-logo-original-fill', logoPositionMarker = 'data-ycp-logo-original-position';
+  const faviconMarker = 'data-ycp-favicon', faviconRelMarker = 'data-ycp-favicon-original-rel';
+  let consoleFavicon = null;
+  function restoreConsoleFavicon() {
+    consoleFavicon = null;
+    document.head.querySelectorAll(`link[${faviconMarker}]`).forEach(link => link.remove());
+    for (const link of document.head.querySelectorAll(`link[${faviconRelMarker}]`)) {
+      if (!link.hasAttribute('rel')) link.setAttribute('rel', link.getAttribute(faviconRelMarker));
+      link.removeAttribute(faviconRelMarker);
+    }
+  }
+  function updateConsoleFavicon(path) {
+    if (!path) {
+      restoreConsoleFavicon();
+      return;
+    }
+    const shape = path.getAttribute('d');
+    const color = getComputedStyle(path).fill;
+    if (!consoleFavicon?.link.isConnected || consoleFavicon.shape !== shape || consoleFavicon.color !== color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 32;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        restoreConsoleFavicon();
+        return;
+      }
+      context.fillStyle = color;
+      context.fill(new Path2D(shape));
+      const href = canvas.toDataURL('image/png');
+      const link = consoleFavicon?.link.isConnected ? consoleFavicon.link : document.createElement('link');
+      link.setAttribute(faviconMarker, '');
+      link.rel = 'icon';
+      link.type = 'image/png';
+      link.sizes.add('32x32');
+      link.href = href;
+      consoleFavicon = {link, shape, color};
+      if (!link.isConnected) document.head.append(link);
+    }
+    for (const link of document.head.querySelectorAll(`link[rel~="icon" i]:not([${faviconMarker}])`)) {
+      link.setAttribute(faviconRelMarker, link.getAttribute('rel'));
+      link.removeAttribute('rel');
+    }
+  }
   function restoreMarkedStyle(node, property, marker) {
     const stored = node.getAttribute(marker);
     if (stored === null) return;
@@ -479,20 +530,24 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       restoreMarkedStyle(anchor, 'position', logoPositionMarker);
       anchor.querySelectorAll(':scope > [data-ycp-folder-badge]').forEach(node => node.remove());
     }
-    if (!path || !colorConsoleLogo && !showFolderBadge) return;
+    if (!path || !colorConsoleLogo && !showFolderBadge) {
+      restoreConsoleFavicon();
+      return;
+    }
     if (!consoleLogo) {
       consoleLogo = {path, anchor: path.closest('a'), fill: path.style.getPropertyValue('fill'), priority: path.style.getPropertyPriority('fill')};
       path.setAttribute(logoFillMarker, JSON.stringify({value: consoleLogo.fill, priority: consoleLogo.priority}));
     }
-    const cloud = canScanIdentity() ? currentCloud() : null;
-    const current = cloud && activeCloud(cloud) ? cloud : null;
-    if (colorConsoleLogo && current) {
-      const color = itemColor(current);
-      const safeColor = typeof color === 'string' && !/[\\]|(?:url|var|env)\s*\(/i.test(color) && CSS.supports('color', color);
-      path.style.setProperty('fill', safeColor ? color : Core.color(current.id), 'important');
-    }
+    const activeIdentity = canScanIdentity();
+    const profileKey = federationId === null ? Federation.passportProfileKey(location.origin, passportSubject()) : Federation.profileKey(location.origin, federationId);
+    const color = colorConsoleLogo && identity && activeIdentity ? preferences[profileKey]?.appearance?.color : null;
+    const safeColor = typeof color === 'string' && !/[\\]|(?:url|var|env)\s*\(/i.test(color) && CSS.supports('color', color);
+    if (safeColor) path.style.setProperty('fill', color, 'important');
     else if (consoleLogo.fill) path.style.setProperty('fill', consoleLogo.fill, consoleLogo.priority);
     else path.style.removeProperty('fill');
+    updateConsoleFavicon(safeColor ? path : null);
+    const cloud = activeIdentity ? currentCloud() : null;
+    const current = cloud && activeCloud(cloud) ? cloud : null;
     const route = Core.route(location.href, location.origin);
     const folder = showFolderBadge && current && route?.type === 'folder' && (!route.cloudId || route.cloudId === current.id) ? current.folders.find(item => item.id === route.id) : null;
     if (!folder) {
@@ -530,7 +585,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     if (!active) { revealedRoute = transition; return; }
     if (!cloud) return;
     revealedRoute = transition;
-    if (personalMode() && showPersonalOrganizations && collapsedOrganizations.delete(federationGroupKey(null))) rememberLayout();
+    if (personalMode() && showPersonalOrganizations && collapsedOrganizations.delete(federationGroupKey(null, passportSubject()))) rememberLayout();
     if (federationId && collapsedOrganizations.delete(federationGroupKey(federationId))) rememberLayout();
     if (collapsedOrganizations.delete(organizationGroupKey(cloud.organizationId))) rememberLayout();
     if (!cloudFoldersEnabled(cloud) || hasNoFolders(cloud.id)) return;
@@ -541,10 +596,14 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     if (stopped || !canScanIdentity()) return;
     const snapshot = Core.catalogCache(state.clouds, location.origin);
     const savedCatalogKey = catalogKey;
-    preferences[savedCatalogKey] = snapshot;
-    const saved = {[savedCatalogKey]: snapshot};
+    const subject = passportSubject();
+    const saved = {};
+    if (!subject) {
+      preferences[savedCatalogKey] = snapshot;
+      saved[savedCatalogKey] = snapshot;
+    }
     if (personalMode()) {
-      const passportKey = Federation.passportCatalogKey(location.origin);
+      const passportKey = Federation.passportCatalogKey(location.origin, passportSubject());
       preferences[passportKey] = snapshot;
       saved[passportKey] = snapshot;
     }
@@ -552,12 +611,12 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function saveFederationProfile() {
     if (stopped || !identity) return;
-    const profileKey = identity.id === null ? Federation.passportProfileKey(location.origin) : Federation.profileKey(location.origin, identity.id);
+    const profileKey = identity.id === null ? Federation.passportProfileKey(location.origin, passportSubject()) : Federation.profileKey(location.origin, identity.id);
     const profile = {...preferences[profileKey], name: identity.name || (identity.id === null ? t('passportAccount') : identity.id), ...(identity.subjectId ? {subjectId: identity.subjectId} : {})};
     if (preferences[profileKey]?.name === profile.name && preferences[profileKey]?.subjectId === profile.subjectId) return;
     const saved = {[profileKey]: profile};
-    if (identity.subjectId && preferences[profileKey]?.subjectId !== identity.subjectId) {
-      const passportKey = Federation.passportCatalogKey(location.origin);
+    if (!passportSubject() && identity.subjectId && preferences[profileKey]?.subjectId !== identity.subjectId) {
+      const passportKey = Federation.passportCatalogKey(location.origin, passportSubject());
       preferences[passportKey] = [];
       saved[passportKey] = [];
     }
@@ -580,9 +639,29 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       try { sessionStorage.removeItem('yc-power:destination'); } catch { /* session storage can be unavailable */ }
     }
   }
-  function syncIdentity() {
+  function migratePassportPreferences() {
+    const subject = passportSubject();
+    if (!subject) return;
+    const profileKey = Federation.passportProfileKey(location.origin, subject);
+    const legacy = preferences[Federation.passportProfileKey(location.origin)];
+    if (Object.hasOwn(preferences, profileKey) || legacy?.subjectId !== subject) return;
+    const values = {[profileKey]: legacy};
+    const legacyCatalog = preferences[Federation.passportCatalogKey(location.origin)];
+    const catalogKey = Federation.passportCatalogKey(location.origin, subject);
+    if (legacyCatalog && !Object.hasOwn(preferences, catalogKey)) values[catalogKey] = legacyCatalog;
+    const legacyOrganizations = new Set(Core.catalogCache(legacyCatalog, location.origin).map(cloud => cloud.organizationId || null));
+    for (const [oldKey, value] of Object.entries(preferences)) {
+      const scope = Federation.parseKey(oldKey);
+      if (scope?.origin !== location.origin || scope.kind !== 'organization' || scope.federationId !== null || scope.subjectId || !legacyOrganizations.has(scope.organizationId)) continue;
+      const newKey = scopeKey(scope.organizationId);
+      if (!Object.hasOwn(preferences, newKey)) values[newKey] = value;
+    }
+    for (const [newKey, value] of Object.entries(values)) preferenceSync.receive(newKey, structuredClone(value));
+    storage?.set(values).catch(() => {});
+  }
+  function syncIdentity(force = false) {
     const next = readIdentity();
-    if ((next?.id || null) === federationId && Boolean(next) === Boolean(identity) && next?.subjectId === identity?.subjectId) {
+    if (!force && (next?.id || null) === federationId && Boolean(next) === Boolean(identity) && next?.subjectId === identity?.subjectId) {
       const renamed = next?.name !== identity?.name;
       identity = next; saveFederationProfile(); if (renamed) render(); return;
     }
@@ -590,6 +669,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     preferenceSync.flush(key).catch(() => {});
     invalidateScans(); clearCloudDrag();
     identity = next; federationId = next?.id || null;
+    migratePassportPreferences();
     key = scopeKey(null); catalogKey = Federation.catalogKey(location.origin, federationId);
     selectedOrganizationId = null; organization = null; scanReady = false; edit = null;
     state = {...defaults(), ...structuredClone(preferences[key] || {}), width: state.width, clouds: activeCatalog()};
@@ -804,7 +884,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     rows.set(id, {...rows.get(id), ...row});
   }
   function cloudSettings(cloud) {
-    const cloudKey = scopeKey(cloud.organizationId, cloudFederation(cloud));
+    const cloudKey = cloudScope(cloud);
     return cloudKey === key ? state : {...defaults(), ...preferences[cloudKey]};
   }
   function decorateNative() {
@@ -1003,10 +1083,10 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
   }
   function customize(item, parent) {
     const cloud = item.type === 'cloud' ? item : parent;
-    if (edit?.key === `${item.type}:${item.id}` && edit?.federationId === cloudFederation(cloud)) { edit = null; render(); return; }
+    if (edit?.key === `${item.type}:${item.id}` && edit?.cloudScope === cloudScope(cloud)) { edit = null; render(); return; }
     const probe = document.createElement('span'); probe.style.color = itemColor(item, parent); shadow.append(probe);
     const rgb = getComputedStyle(probe).color.match(/\d+/g); probe.remove();
-    edit = {cloud, federationId: cloudFederation(cloud), cloudId: cloud?.id, key: `${item.type}:${item.id}`, type: item.type, iconsEnabled: item.type === 'folder' || !cloudFoldersEnabled(item), icon: itemIconName(item, parent), name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
+    edit = {cloud, cloudScope: cloudScope(cloud), cloudId: cloud?.id, key: `${item.type}:${item.id}`, type: item.type, iconsEnabled: item.type === 'folder' || !cloudFoldersEnabled(item), icon: itemIconName(item, parent), name: item.name, label: display(item, parent), color: rgb ? `#${rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('')}` : '#246bfd'};
     render();
   }
   function customizeGroup(type, groupKey, name) {
@@ -1050,18 +1130,31 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     if (route?.id !== item.id || route.type !== item.type) return undefined;
     if (activeCloud(item)) return route.href;
     if (cloudFederation(item) !== null) return Federation.loginHref(location.origin, cloudFederation(item));
-    return Federation.passportLoginHref(location.origin, preferences[Federation.passportProfileKey(location.origin)]?.subjectId, route.href);
+    return Federation.passportLoginHref(location.origin, passportDestinationSubject(item), route.href);
+  }
+  function passportDestinationSubject(item) {
+    if (activeCloud(item)) return identity?.subjectId;
+    return cloudSubject(item) || preferences[Federation.passportProfileKey(location.origin)]?.subjectId;
   }
   async function navigateCached(event, item) {
     if (stopped) return;
-    if (activeCloud(item)) return;
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const containers = useSessionContainers && !browser.extension?.inIncognitoContext;
+    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+    if (event.button !== 0 && !(containers && event.button === 1)) return;
+    if (!containers && modified) return;
+    if (activeCloud(item) && !containers) return;
     event.preventDefault();
     const href = safeHref(item), route = Core.route(item.href, location.origin);
     const passport = cloudFederation(item) === null;
     if (!href || !route || route.id !== item.id || route.type !== item.type) return;
     try {
-      const subjectId = passport ? preferences[Federation.passportProfileKey(location.origin)]?.subjectId : undefined;
+      const subjectId = passport ? passportDestinationSubject(item) : undefined;
+      if (containers) {
+        await flushPendingPreferences();
+        const result = await browser.runtime.sendMessage({type: 'yc-power:open-container', federationId: cloudFederation(item), subjectId, href: route.href, background: !event.shiftKey && (event.button === 1 || event.ctrlKey || event.metaKey), newTab: modified || event.button === 1, activeAccount: activeCloud(item)});
+        if (result?.opened) return;
+        if (activeCloud(item)) { location.assign(route.href); return; }
+      }
       sessionStorage.setItem('yc-power:destination', JSON.stringify({federationId: cloudFederation(item), ...(subjectId ? {subjectId} : {}), href: route.href, expires: Date.now() + 300000}));
       await flushPendingPreferences();
       if (stopped) return;
@@ -1088,12 +1181,12 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       }}><Icon data={!empty && itemExpanded(item) ? ChevronDown : ChevronRight} size={16}/></Button> : <span className="ycp-disclosure-space"/>)}
       {item.type === 'folder' && <span className="ycp-indent"/>}
       <span className="ycp-item-icon" data-ycp-tooltip={draggable ? t('dragCloud') : undefined} style={{color: itemColor(item, parent)}}><Icon data={item.type === 'cloud' ? (cloudFoldersEnabled(item) ? Cloud : cloudIcons[itemIconName(item)]) : folderIcons[itemIconName(item, parent)]} size={16}/><ActiveDot active={item.type === 'cloud' && cloudFoldersEnabled(item) && activeCloud(item) && currentCloud()?.id === item.id}/></span>
-      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} onClick={event => navigateCached(event, item)} data-ycp-tooltip={`${item.name}\n${item.id}${activeCloud(item) ? '' : `\n${t('cachedFederation')}`}`} aria-current={current ? 'page' : undefined}>
+      <a className="ycp-link" draggable={draggable ? false : undefined} href={safeHref(item)} onClick={event => navigateCached(event, item)} onAuxClick={event => { if (useSessionContainers && event.button === 1) void navigateCached(event, item); }} data-ycp-tooltip={`${item.name}\n${item.id}${activeCloud(item) ? '' : `\n${t('cachedFederation')}`}`} aria-current={current ? 'page' : undefined}>
         <Text variant="body-1">{display(item, parent)}</Text>
       </a>
       {item.type === 'cloud' && <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} data-ycp-tooltip={t(cloudSettings(item).mine.includes(item.id) ? 'remove' : 'add')} onClick={() => toggleMine(item)}><Icon data={cloudSettings(item).mine.includes(item.id) ? CircleMinus : CirclePlus} size={16}/></Button>}
       {item.type === 'folder' && <span/>}
-      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} aria-expanded={edit?.key === `${item.type}:${item.id}` && edit?.federationId === cloudFederation(item)} data-ycp-tooltip={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
+      <Button className="ycp-row-action" view="flat-secondary" size="m" aria-label={t('customize', {name: item.name})} aria-expanded={edit?.key === `${item.type}:${item.id}` && edit?.cloudScope === cloudScope(item.type === 'folder' ? parent : item)} data-ycp-tooltip={t(item.type === 'folder' ? 'customizeFolderTitle' : 'customizeTitle')} onClick={() => customize(item, parent)}><Icon data={Ellipsis} size={16}/></Button>
     </div>;
   }
   function EditActions({measurement = false}) {
@@ -1307,6 +1400,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     setNativeVisibility(); decorateNative(); render();
   }
   function cleanup(discard = false) {
+    restoreConsoleFavicon();
     restoreConsoleLogo();
     if (discard) stopped = true;
     cancelStartupWait();
@@ -1355,6 +1449,14 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       if (!legacyPreference && (!scope || scope.origin !== location.origin || scope.kind === 'layout')) continue;
       if (preferenceSync.receive(changedKey, change.newValue)) { anyChanged = true; if (changedKey === key) activeChanged = true; }
     }
+    if (changes.useSessionContainers) {
+      const wasEnabled = useSessionContainers;
+      useSessionContainers = Boolean(browser.runtime?.getManifest?.().browser_specific_settings?.gecko) && changes.useSessionContainers.newValue === true;
+      if (wasEnabled !== useSessionContainers) {
+        if (personalMode() && !managedContainer) { syncIdentity(true); return; }
+        else render();
+      }
+    }
     if (activeChanged) {
       clearCloudDrag();
       state = {...defaults(), ...structuredClone(preferences[key] || {}), clouds: state.clouds};
@@ -1366,14 +1468,28 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     decorateNative();
   });
   async function start() {
+    restoreConsoleFavicon();
     try {
       const storedPreferences = storage ? await storage.get(null) : {};
       if (stopped) return;
+      if (browser.runtime?.getManifest?.().browser_specific_settings?.gecko) {
+        const observedSubjectId = identity?.id === null ? identity.subjectId : undefined;
+        managedContainer = await browser.runtime.sendMessage({type: 'yc-power:managed-container', observedSubjectId}).catch(() => false) === true;
+        try {
+          if (managedContainer) sessionStorage.setItem('yc-power:managed-passport', 'true');
+          else managedContainer = sessionStorage.getItem('yc-power:managed-passport') === 'true';
+        } catch { /* session storage can be unavailable */ }
+      }
+      if (browser.runtime?.getManifest?.().browser_specific_settings?.gecko && storedPreferences.useSessionContainers === true) {
+        const destination = await browser.runtime.sendMessage({type: 'yc-power:container-destination'}).catch(() => null);
+        if (destination) sessionStorage.setItem('yc-power:destination', JSON.stringify(destination));
+      }
       for (const [storedKey, settings] of Object.entries(storedPreferences)) {
         if (!Object.hasOwn(preferences, storedKey)) preferenceSync.receive(storedKey, settings);
       }
       colorConsoleLogo = storedPreferences.colorConsoleLogo === true;
       showFolderBadge = storedPreferences.showFolderBadge === true;
+      useSessionContainers = Boolean(browser.runtime?.getManifest?.().browser_specific_settings?.gecko) && storedPreferences.useSessionContainers === true;
       compactDensity = storedPreferences.compactDensity === true;
       hideSingleOrganization = storedPreferences.hideSingleOrganization === true;
       showPersonalOrganizations = storedPreferences.showPersonalOrganizations === true;
@@ -1381,6 +1497,8 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       const layout = storedPreferences[layoutKey];
       if (Array.isArray(layout?.groupOrder)) groupOrder = [...new Set(layout.groupOrder.filter(id => typeof id === 'string'))];
       if (Array.isArray(layout?.collapsedOrganizations)) layout.collapsedOrganizations.filter(id => typeof id === 'string').forEach(id => collapsedOrganizations.add(id));
+      migratePassportPreferences();
+      key = scopeKey(null);
       const prefix = scopeKey(null).replace(/unscoped$/, '');
       const visibleOrganizations = [...new Set([...document.querySelectorAll('.console-dashboard-layout__aside [data-list-item^="organization."]')].map(row => row.dataset.listItem.slice(13)))];
       const visibleKey = visibleOrganizations.length === 1 ? scopeKey(visibleOrganizations[0]) : null;
@@ -1411,6 +1529,7 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
       syncIdentity();
       updateConsoleLogo();
       const activeId = currentCloud()?.id || null;
+      if (location.href !== lastUrl) resumeDestination();
       if (location.href !== lastUrl || activeId !== lastActiveCloudId) { lastUrl = location.href; lastActiveCloudId = activeId; syncOrganization(); initializeMine(); render(); decorateNative(); }
     }, 1000);
   }

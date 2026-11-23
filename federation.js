@@ -44,13 +44,13 @@
     return identity;
   }
   const profileKey = (origin, id) => `yc-power:${origin}:federation:id:${encodeURIComponent(id)}:profile`;
-  const passportCatalogKey = origin => `yc-power:${origin}:passport-catalog`;
-  const passportProfileKey = origin => `yc-power:${origin}:passport-profile`;
+  const passportCatalogKey = (origin, subject) => subject ? `yc-power:${origin}:passport:id:${subject}:passport-catalog` : `yc-power:${origin}:passport-catalog`;
+  const passportProfileKey = (origin, subject) => subject ? `yc-power:${origin}:passport:id:${subject}:passport-profile` : `yc-power:${origin}:passport-profile`;
   function catalogKey(origin, id = null) {
     return `yc-power:${origin}:${id === null ? '' : `federation:id:${encodeURIComponent(id)}:`}catalog`;
   }
-  function scopeKey(origin, organizationId, id = null) {
-    return `yc-power:${origin}:${id === null ? '' : `federation:id:${encodeURIComponent(id)}:`}organization:${organizationId ? `id:${encodeURIComponent(organizationId)}` : 'unscoped'}`;
+  function scopeKey(origin, organizationId, id = null, subject = null) {
+    return `yc-power:${origin}:${id === null ? (subject ? `passport:id:${subject}:` : '') : `federation:id:${encodeURIComponent(id)}:`}organization:${organizationId ? `id:${encodeURIComponent(organizationId)}` : 'unscoped'}`;
   }
   function decode(value) {
     try {
@@ -60,6 +60,12 @@
   }
   function parseKey(key) {
     if (typeof key !== 'string') return null;
+    const passport = /^yc-power:(https:\/\/[^/]+?):passport:id:([A-Za-z0-9][A-Za-z0-9_-]{0,255}):(passport-catalog|passport-profile|organization:(?:unscoped|id:([^:]+)))$/.exec(key);
+    if (passport && passport[0] === key && validOrigin(passport[1])) {
+      const organizationId = passport[4] === undefined ? null : decode(passport[4]);
+      if (passport[4] !== undefined && organizationId === null) return null;
+      return {origin: passport[1], federationId: null, subjectId: passport[2], kind: passport[3].startsWith('organization:') ? 'organization' : passport[3], organizationId};
+    }
     const match = /^yc-power:(https:\/\/[^/]+?):((?:federation:id:([^:]+):)?)(catalog|passport-catalog|passport-profile|layout|profile|organization:(?:unscoped|id:([^:]+)))$/.exec(key);
     if (!match || match[0] !== key || !validOrigin(match[1])) return null;
     const id = match[3] === undefined ? null : decode(match[3]);
@@ -75,7 +81,7 @@
     return Object.entries(stored).flatMap(([key, value]) => {
       const scope = parseKey(key);
       if (!scope || scope.origin !== origin || !['catalog', 'passport-catalog'].includes(scope.kind) || !Array.isArray(value)) return [];
-      return [{federationId: scope.federationId, catalog: normalizeCatalog(value, origin), key}];
+      return [{federationId: scope.federationId, ...(scope.subjectId ? {subjectId: scope.subjectId} : {}), catalog: normalizeCatalog(value, origin), key}];
     });
   }
   const identityKey = (id, value) => JSON.stringify([id, value]);
