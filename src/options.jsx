@@ -26,12 +26,14 @@ function normalizeHost(value) {
 }
 
 function Settings() {
+    const supportsSessionContainers = Boolean(browser.runtime.getManifest?.()?.browser_specific_settings?.gecko);
     const [hosts, setHosts] = useState(DEFAULT_HOSTS.map((host) => ({host, cloudOnly: false})));
     const [compactDensity, setCompactDensity] = useState(false);
     const [hideSingleOrganization, setHideSingleOrganization] = useState(false);
     const [showPersonalOrganizations, setShowPersonalOrganizations] = useState(false);
     const [colorConsoleLogo, setColorConsoleLogo] = useState(false);
     const [showFolderBadge, setShowFolderBadge] = useState(false);
+    const [useSessionContainers, setUseSessionContainers] = useState(undefined);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState(null);
@@ -40,7 +42,7 @@ function Settings() {
     const importInput = useRef(null);
     const busy = useRef(false);
     useEffect(() => {
-        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge']).then((stored) => {
+        browser.storage.local.get(['domainHosts', 'compactDensity', 'cloudOnlyHosts', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge', 'useSessionContainers']).then((stored) => {
             const disabledHosts = new Set((Array.isArray(stored.cloudOnlyHosts) ? stored.cloudOnlyHosts : []).flatMap((host) => {
                 try { return [normalizeHost(host)]; } catch { return []; }
             }));
@@ -54,6 +56,7 @@ function Settings() {
             setShowPersonalOrganizations(stored.showPersonalOrganizations === true);
             setColorConsoleLogo(stored.colorConsoleLogo === true);
             setShowFolderBadge(stored.showFolderBadge === true);
+            setUseSessionContainers(typeof stored.useSessionContainers === 'boolean' ? stored.useSessionContainers : undefined);
             if (new URLSearchParams(location.search).has('import')) setStatus({theme: 'info', message: t.importChoose});
             setLoading(false);
         }).catch(() => {
@@ -88,6 +91,7 @@ function Settings() {
             showFolderBadge: settings.showFolderBadge === true,
         };
         await browser.storage.local.set(applied);
+        if (supportsSessionContainers && !applied.useSessionContainers) await browser.permissions.remove({permissions: ['cookies']});
         const manifest = browser.runtime?.getManifest?.() || {};
         const requiredOrigins = [...(manifest.host_permissions || []), ...(manifest.permissions || [])];
         const removed = previous.flatMap(host => {
@@ -120,6 +124,7 @@ function Settings() {
             setShowPersonalOrganizations(settings.showPersonalOrganizations === true);
             setColorConsoleLogo(settings.colorConsoleLogo === true);
             setShowFolderBadge(settings.showFolderBadge === true);
+            if (supportsSessionContainers || 'useSessionContainers' in settings) setUseSessionContainers(settings.useSessionContainers === true);
             setStatus({theme: 'success', message: t.importReady});
         } catch { setStatus({theme: 'danger', message: t.importFailed}); }
         finally {
@@ -144,6 +149,7 @@ function Settings() {
                 showPersonalOrganizations: false,
                 colorConsoleLogo: false,
                 showFolderBadge: false,
+                useSessionContainers: false,
             };
             // publish the reset marker before removing data so content scripts discard pending writes
             await browser.storage.local.set(defaults);
@@ -157,6 +163,8 @@ function Settings() {
             setShowPersonalOrganizations(false);
             setColorConsoleLogo(false);
             setShowFolderBadge(false);
+            setUseSessionContainers(false);
+            if (supportsSessionContainers) await browser.permissions.remove({permissions: ['cookies']});
             setImported(null);
             if (importInput.current) importInput.current.value = '';
             const manifest = browser.runtime?.getManifest?.() || {};
@@ -187,14 +195,19 @@ function Settings() {
             const next = [...rows.keys()];
             const cloudOnlyHosts = [...rows.values()].filter((row) => row.cloudOnly).map((row) => row.host);
             // request permissions directly from the save gesture
-            const request = next.length ? browser.permissions.request({origins: next.map((host) => host + '/*')}) : Promise.resolve(true);
+            const permissions = {};
+            if (next.length) permissions.origins = next.map((host) => host + '/*');
+            if (supportsSessionContainers && useSessionContainers) permissions.permissions = ['cookies'];
+            const request = Object.keys(permissions).length ? browser.permissions.request(permissions) : Promise.resolve(true);
             busy.current = true;
             setSaving(true);
             if (!await request) {
                 setStatus({theme: 'warning', message: t.denied});
                 return;
             }
-            await persistSettings({...imported, domainHosts: next, compactDensity, cloudOnlyHosts, hideSingleOrganization, showPersonalOrganizations, colorConsoleLogo, showFolderBadge});
+            const settings = {...imported, domainHosts: next, compactDensity, cloudOnlyHosts, hideSingleOrganization, showPersonalOrganizations, colorConsoleLogo, showFolderBadge};
+            if (supportsSessionContainers || useSessionContainers !== undefined) settings.useSessionContainers = useSessionContainers === true;
+            await persistSettings(settings);
         } catch (error) {
             setStatus({theme: 'danger', message: error instanceof HostError ? error.message : t.saveFailed});
         } finally { busy.current = false; setSaving(false); }
@@ -244,12 +257,18 @@ function Settings() {
                         controlProps={{'aria-describedby': 'show-folder-badge-hint'}}>{t.showFolderBadge}</Checkbox>
                     <Text as="p" variant="body-1" color="secondary" id="show-folder-badge-hint">{t.showFolderBadgeHint}</Text>
                 </section>
+                {supportsSessionContainers && <section className="settings-appearance" aria-labelledby="sessions-heading">
+                    <Text as="h2" variant="subheader-1" id="sessions-heading">{t.sessions}</Text>
+                    <Checkbox size="m" checked={useSessionContainers === true} onUpdate={setUseSessionContainers} disabled={loading || saving}
+                        controlProps={{'aria-describedby': 'session-containers-hint'}}>{t.useSessionContainers}</Checkbox>
+                    <Text as="p" variant="body-1" color="secondary" id="session-containers-hint">{t.useSessionContainersHint}</Text>
+                </section>}
                 <input ref={importInput} type="file" accept="application/json,.json" hidden onChange={importSettings}/>
                 <div className="settings-transfer">
                     <Button view="outlined" disabled={loading || saving} onClick={exportSettings}><Icon data={ArrowDownToLine} size={16}/>{t.exportSettings}</Button>
                     <Button view="outlined" disabled={loading || saving} onClick={chooseImport}><Icon data={ArrowUpFromLine} size={16}/>{t.importSettings}</Button>
+                    <Button view="outlined-danger" disabled={loading || saving} onClick={() => setResetOpen(true)}><Icon data={TrashBin} size={16}/>{t.resetSettings}</Button>
                 </div>
-                <Button className="settings-reset" view="outlined-danger" disabled={loading || saving} onClick={() => setResetOpen(true)}><Icon data={TrashBin} size={16}/>{t.resetSettings}</Button>
                 <div className="settings-actions">{status && <Text className="settings-status" variant="body-2" color={status.theme === 'success' ? 'positive' : status.theme} role="status" aria-live="polite">{status.message}</Text>}<Button type="submit" view="action" size="l" loading={saving} disabled={loading}><Icon data={FloppyDisk} size={16}/>{t.save}</Button></div>
             </form>
         </Card>

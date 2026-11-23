@@ -1,4 +1,4 @@
-# Chrome Web Store listing: YC Power 1.6.3
+# Chrome Web Store listing: YC Power 1.7.0
 
 ## Store details
 
@@ -18,7 +18,7 @@ YC Power brings your frequently used clouds and folders together in a compact si
 - Keep inactive federations available from the local cache, with the current group always first
 - Customize federation and organization labels and colors, and choose from 40 cloud and folder icon presets
 - Identify the current federation, organization, and cloud by an icon indicator
-- Optionally color the console logo by cloud and show the current folder icon beside it
+- Optionally color the console logo and tab icon by federation and show the current folder icon beside it
 - Use clouds-only mode for individual console addresses
 - Add other HTTPS console addresses, including regional consoles, with your permission
 - Transfer settings and the navigation cache between browsers using a JSON file

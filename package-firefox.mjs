@@ -5,7 +5,7 @@ import {deflateRawSync} from 'node:zlib';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const files = [
-    'manifest.json', 'background.js', 'content.js', 'content.css', 'icons/icon.svg',
+    'manifest.json', 'core.js', 'federation.js', 'background.js', 'content.js', 'content.css', 'icons/icon.svg',
     'options.html', 'options.js', 'options.css', 'THIRD_PARTY_NOTICES.txt',
     '_locales/en/messages.json', '_locales/ru/messages.json',
 ].sort();

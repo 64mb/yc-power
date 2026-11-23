@@ -258,3 +258,29 @@ test('personal profile subjects round trip without allowing subjects in federati
   assert.throws(() => parseSettings(envelope({[federationKey]: profile})), /Invalid settings file/);
   assert.throws(() => exportSettings({[federationKey]: profile}), /Invalid settings file/);
 });
+
+test('container preference exports without browser-local container associations', () => {
+  const result = parseSettings(exportSettings({useSessionContainers: true, _sessionContainers: {'synthetic-key': 'firefox-container-1'}}));
+  assert.equal(result.useSessionContainers, true);
+  assert.equal('_sessionContainers' in result, false);
+  assert.throws(() => parseSettings(envelope({useSessionContainers: 'true'})), /Invalid settings file/);
+});
+
+test('isolated personal scopes preserve independent account settings', () => {
+  const Federation = require('../federation.js');
+  const stored = {useSessionContainers: true};
+  for (const subject of ['subject-alpha', 'subject-beta']) {
+    stored[Federation.passportProfileKey(publicOrigin, subject)] = {name: subject, subjectId: subject};
+    stored[Federation.passportCatalogKey(publicOrigin, subject)] = [];
+    stored[Federation.scopeKey(publicOrigin, 'example-org', null, subject)] = {mine: ['example-cloud'], initialized: true, width: 360, custom: {}};
+  }
+  const parsed = parseSettings(exportSettings(stored));
+  for (const [key, value] of Object.entries(stored)) assert.deepEqual(parsed[key], value);
+});
+
+test('personal scoped profiles reject an account different from their storage key', () => {
+  const Federation = require('../federation.js');
+  const key = Federation.passportProfileKey(publicOrigin, 'subject-alpha');
+  assert.throws(() => parseSettings(envelope({[key]: {name: 'Synthetic', subjectId: 'subject-beta'}})), /Invalid settings file/);
+  assert.equal(parseSettings(envelope({[key]: {name: 'Synthetic'}}))[key].name, 'Synthetic');
+});

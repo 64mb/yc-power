@@ -13,9 +13,9 @@
   "version": {
     "license": "all-rights-reserved",
     "release_notes": {
-      "en-US": "Add optional cloud-colored console logos and colored folder badges. Open settings imports in a persistent tab and apply imported settings with Save. Improve settings status text and navigation labels.",
-      "ru": "Добавлены настройки цвета логотипа консоли и значка текущего каталога. Импорт открывается в отдельной вкладке, настройки применяются кнопкой «Сохранить». Улучшены подписи и сообщения в настройках."
+      "en-US": "Add optional isolated Firefox sessions for federations and personal accounts. Match container colors to federation colors using the closest Firefox shade. Keep account caches separate and simplify settings action buttons. Color the console logo and browser tab icon by the active federation or personal account.",
+      "ru": "Добавлены изолированные сессии Firefox для федераций и личных аккаунтов. Цвет контейнеров соответствует ближайшему оттенку цвета федерации. Кеш личных аккаунтов разделен, кнопки настроек сделаны компактнее. Логотип консоли и значок вкладки окрашиваются в цвет активной федерации или личного аккаунта."
     },
-    "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded."
+    "approval_notes": "Build instructions are included in docs/amo/BUILD.md in the source archive. Bundles contain React and Gravity UI. No remote code or telemetry. Default host permission is limited to the public Yandex Cloud console. Optional HTTPS permissions allow user-configured console addresses; no private hosts are embedded. Firefox declares contextualIdentities to manage containers and requests cookies only when the container option is enabled because tabs.create cookieStoreId requires it. The extension never reads or copies authentication cookies. Container associations are local and excluded from exported settings. Chromium has no container permissions."
   }
 }

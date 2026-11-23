@@ -782,7 +782,7 @@ const initialTransferSettings = {
 
 async function downloadSettings(page) {
   const downloading = page.waitForEvent('download');
-  await page.getByRole('button', {name: 'Export settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Export', exact: true}).click();
   const download = await downloading;
   expect(download.suggestedFilename()).toBe('yc-power-settings.json');
   const text = await readFile(await download.path(), 'utf8');
@@ -885,7 +885,7 @@ test('import stages all settings until Save and preserves subsequent form edits'
   expect(await page.evaluate(() => fixture.writes)).toEqual([]);
   expect(await page.evaluate(() => fixture.requests)).toEqual([]);
   await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
-  await expect(page.getByRole('checkbox', {name: 'Color the console logo by cloud', exact: true})).toBeChecked();
+  await expect(page.getByRole('checkbox', {name: 'Color the console logo by federation', exact: true})).toBeChecked();
   await expect(page.getByRole('checkbox', {name: 'Show the folder icon on the console logo', exact: true})).toBeChecked();
   expect((await downloadSettings(page)).settings).toEqual(initialTransferSettings);
   await page.getByRole('checkbox', {name: 'Show the folder icon on the console logo', exact: true}).uncheck();
@@ -904,7 +904,7 @@ test('invalid JSON preserves the form and a failed Save retains the staged impor
   await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).not.toBeChecked();
   await expect(page.locator('.domain-row input')).toHaveCount(2);
   expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
-  await expect(page.getByRole('button', {name: 'Import settings', exact: true})).toBeEnabled();
+  await expect(page.getByRole('button', {name: 'Import', exact: true})).toBeEnabled();
   await page.reload();
   await expect(page.locator('.domain-row input').first()).toBeEnabled();
   const settings = structuredClone(initialTransferSettings);
@@ -915,7 +915,7 @@ test('invalid JSON preserves the form and a failed Save retains the staged impor
   await expect(page.getByRole('status')).toHaveText('Settings loaded from JSON. Save to apply them');
   await page.getByRole('button', {name: 'Save', exact: true}).click();
   await expect(page.getByRole('status')).toHaveText('Could not save settings. Please try again');
-  await expect(page.getByRole('button', {name: 'Import settings', exact: true})).toBeEnabled();
+  await expect(page.getByRole('button', {name: 'Import', exact: true})).toBeEnabled();
   await expect(page.getByRole('checkbox', {name: 'Compact mode', exact: true})).toBeChecked();
   expect(await page.evaluate(() => fixture.memory)).toEqual(initialTransferSettings);
   await page.evaluate(() => { fixture.failWrites = false; });
@@ -928,7 +928,7 @@ test('popup import opens a persistent options tab without opening a file chooser
   await page.goto('/tests/fixtures/options.html?scenario=options-popup');
   const choosers = [];
   page.on('filechooser', chooser => choosers.push(chooser));
-  await page.getByRole('button', {name: 'Import settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Import', exact: true}).click();
   await expect.poll(() => page.evaluate(() => fixture.tabs)).toEqual([{url: new URL('/options.html?import=1', page.url()).href}]);
   expect(choosers).toHaveLength(0);
   expect(await page.evaluate(() => fixture.writes)).toEqual([]);
@@ -936,6 +936,6 @@ test('popup import opens a persistent options tab without opening a file chooser
   await expect(page.getByRole('status')).toHaveText('Choose a JSON file to import, then click Save to apply settings');
   await expect(page.getByRole('status')).toHaveCSS('font-size', '14px');
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', {name: 'Import settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Import', exact: true}).click();
   await (await chooser).setFiles([]);
 });

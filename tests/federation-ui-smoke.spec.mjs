@@ -372,7 +372,7 @@ test('hierarchy options persist and participate in portable settings', async ({p
   await page.goto('/tests/fixtures/options.html?scenario=hierarchy');
   const hide = page.getByRole('checkbox', {name: 'Hide single organizations in federations', exact: true});
   const personal = page.getByRole('checkbox', {name: 'Show personal organizations alongside federations', exact: true});
-  const logoColor = page.getByRole('checkbox', {name: 'Color the console logo by cloud', exact: true});
+  const logoColor = page.getByRole('checkbox', {name: 'Color the console logo by federation', exact: true});
   const folderBadge = page.getByRole('checkbox', {name: 'Show the folder icon on the console logo', exact: true});
   await expect(hide).not.toBeChecked();
   await expect(personal).not.toBeChecked();
@@ -386,7 +386,7 @@ test('hierarchy options persist and participate in portable settings', async ({p
   await expect(hide).toBeChecked(); await expect(personal).toBeChecked();
   await expect(logoColor).toBeChecked(); await expect(folderBadge).toBeChecked();
   const downloaded = page.waitForEvent('download');
-  await page.getByRole('button', {name: 'Export settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Export', exact: true}).click();
   const file = await downloaded;
   const {readFile} = await import('node:fs/promises');
   const settings = JSON.parse(await readFile(await file.path(), 'utf8'));
@@ -429,7 +429,7 @@ test('passport uid without federation flags never renders the stale federated ca
 test('reset confirms before removing all settings and clears staged imports', async ({page}, testInfo) => {
   const url = '/tests/fixtures/options.html?scenario=reset';
   await page.goto(url);
-  await expect(page.getByRole('button', {name: 'Reset all settings', exact: true})).toBeEnabled();
+  await expect(page.getByRole('button', {name: 'Reset all', exact: true})).toBeEnabled();
   await page.evaluate(() => browser.storage.local.set({
     domainHosts: ['https://console.yandex.cloud', 'https://custom.example'], compactDensity: true,
     cloudOnlyHosts: ['https://custom.example'], hideSingleOrganization: true, showPersonalOrganizations: true,
@@ -439,7 +439,7 @@ test('reset confirms before removing all settings and clears staged imports', as
   }));
   await page.reload();
   const before = await page.evaluate(() => structuredClone(fixture.memory));
-  await page.getByRole('button', {name: 'Reset all settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Reset all', exact: true}).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('button', {name: 'Cancel', exact: true})).toBeFocused();
   await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
@@ -448,19 +448,19 @@ test('reset confirms before removing all settings and clears staged imports', as
   const pending = {...before, domainHosts: [...before.domainHosts, 'https://pending.example']};
   await page.locator('input[type=file]').setInputFiles({name: 'settings.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({format: 'yc-power-settings', version: 1, settings: pending}))});
   await expect(page.getByRole('status')).toHaveText('Settings loaded from JSON. Save to apply them');
-  await page.getByRole('button', {name: 'Reset all settings', exact: true}).click();
+  await page.getByRole('button', {name: 'Reset all', exact: true}).click();
   await dialog.getByRole('button', {name: 'Cancel', exact: true}).hover();
   const screenshot = testInfo.outputPath('reset-confirmation.png');
   await page.screenshot({path: screenshot});
   await testInfo.attach('reset-confirmation', {path: screenshot, contentType: 'image/png'});
-  await dialog.getByRole('button', {name: 'Reset all settings', exact: true}).click();
+  await dialog.getByRole('button', {name: 'Reset all', exact: true}).click();
   await expect(page.getByRole('status')).toHaveText('All settings have been reset. Reload the console pages');
   const reset = await page.evaluate(() => fixture.memory);
   expect(typeof reset._ycPowerReset).toBe('string');
-  expect(Object.keys(reset).sort()).toEqual(['_ycPowerReset', 'cloudOnlyHosts', 'compactDensity', 'domainHosts', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge'].sort());
+  expect(Object.keys(reset).sort()).toEqual(['_ycPowerReset', 'cloudOnlyHosts', 'compactDensity', 'domainHosts', 'hideSingleOrganization', 'showPersonalOrganizations', 'colorConsoleLogo', 'showFolderBadge', 'useSessionContainers'].sort());
   expect(reset.domainHosts).toEqual(['https://console.yandex.cloud']);
   expect(reset.cloudOnlyHosts).toEqual([]);
-  expect(reset.compactDensity || reset.hideSingleOrganization || reset.showPersonalOrganizations || reset.colorConsoleLogo || reset.showFolderBadge).toBe(false);
+  expect(reset.compactDensity || reset.hideSingleOrganization || reset.showPersonalOrganizations || reset.colorConsoleLogo || reset.showFolderBadge || reset.useSessionContainers).toBe(false);
   expect(await page.evaluate(() => fixture.revocations)).toEqual([{origins: ['https://custom.example/*']}]);
   await page.getByRole('button', {name: 'Save', exact: true}).click();
   expect(await page.evaluate(() => Object.keys(fixture.memory).some(key => key.startsWith('yc-power:')))).toBe(false);
@@ -785,4 +785,97 @@ test('cloud-only mode hides a lone federation without losing collapse or organiz
   await expect(organization.locator('.ycp-active-dot')).toHaveCount(1);
   await expect(active(page).locator('.ycp-cloud .ycp-active-dot')).toHaveCount(1);
   await expect(active(page).getByRole('link', {name: 'Active custom folder', exact: true})).toBeVisible();
+});
+
+test('session containers are optional and visible only with the Firefox manifest', async ({page}, testInfo) => {
+  await page.goto('/tests/fixtures/options.html?scenario=options-containers-firefox');
+  const checkbox = page.getByRole('checkbox', {name: 'Open console sessions in Firefox containers', exact: true});
+  await expect(checkbox).not.toBeChecked();
+  await checkbox.check();
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => fixture.memory.useSessionContainers)).toBe(true);
+  expect(await page.evaluate(() => fixture.requests.at(-1).permissions)).toEqual(['cookies']);
+  await page.reload();
+  await expect(checkbox).toBeChecked();
+  await expect(page.getByRole('button', {name: 'Save', exact: true})).toBeEnabled();
+  await page.screenshot({path: testInfo.outputPath('session-containers-settings.png'), fullPage: true});
+  await page.emulateMedia({colorScheme: 'dark'});
+  await page.screenshot({path: testInfo.outputPath('session-containers-settings-dark.png'), fullPage: true});
+  await page.goto('/tests/fixtures/options.html?scenario=options-containers-chromium');
+  await expect(checkbox).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Save', exact: true})).toBeEnabled();
+  await page.screenshot({path: testInfo.outputPath('settings-without-containers.png'), fullPage: true});
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  expect(await page.evaluate(() => fixture.requests.at(-1).permissions)).toBeUndefined();
+});
+
+test('enabled Firefox containers route active and cached resources through the background', async ({page}) => {
+  await openFederations(page);
+  await page.evaluate(async () => {
+    fixture.containerMessages = [];
+    browser.runtime = {
+      getManifest: () => ({browser_specific_settings: {gecko: {id: 'synthetic@example.test'}}}),
+      sendMessage: async message => { fixture.containerMessages.push(message); return {opened: true}; },
+    };
+    await browser.storage.local.set({useSessionContainers: true});
+  });
+  await active(page).getByRole('link', {name: 'Active custom cloud', exact: true}).click();
+  await cached(page).getByRole('link', {name: 'Cached custom folder', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => fixture.containerMessages.length)).toBe(2);
+  expect(await page.evaluate(() => fixture.containerMessages.map(message => [message.type, message.federationId]))).toEqual([
+    ['yc-power:open-container', 'federation-alpha'], ['yc-power:open-container', 'federation-beta'],
+  ]);
+  expect(page.url()).toBe(fixtureOrigin + '/clouds/cloud-alpha');
+});
+
+test('isolated Passport accounts keep their own saved resources and navigate by subject', async ({page}) => {
+  await openFederations(page);
+  await page.evaluate(async () => {
+    fixture.containerMessages = [];
+    browser.runtime = {
+      getManifest: () => ({browser_specific_settings: {gecko: {id: 'synthetic@example.test'}}}),
+      sendMessage: async message => { fixture.containerMessages.push(message); return {opened: true}; },
+    };
+    const prefix = `yc-power:${location.origin}:passport:id:`;
+    const saved = {useSessionContainers: true, showPersonalOrganizations: true};
+    for (const [subject, label] of [['subject-a', 'Account A cloud'], ['subject-b', 'Account B cloud']]) {
+      const key = prefix + subject;
+      saved[`${key}:passport-profile`] = {name: subject, subjectId: subject};
+      saved[`${key}:passport-catalog`] = [{type: 'cloud', id: 'cloud-alpha', name: label, href: '/clouds/cloud-alpha', organizationId: 'org-alpha', organizationName: 'Alpha organization', folders: []}];
+      saved[`${key}:organization:id:org-alpha`] = {mine: ['cloud-alpha'], initialized: true, custom: {'cloud:cloud-alpha': {label}}};
+    }
+    fixture.passportA = structuredClone(saved[`${prefix}subject-a:passport-catalog`]);
+    await browser.storage.local.set(saved);
+    document.getElementById('fixture-identity').textContent = 'window.__DATA__ = {"user":{"isFederated":false,"id":"subject-b","displayName":"Account B"}};';
+  });
+  const activeB = page.locator('[data-cloud-id="cloud-alpha"]').getByRole('link', {name: 'Account B cloud', exact: true});
+  const cachedA = page.locator('[data-cached-cloud-id="cloud-alpha"]').getByRole('link', {name: 'Account A cloud', exact: true});
+  await expect(activeB).toBeVisible();
+  await expect(cachedA).toBeVisible();
+  await activeB.click();
+  await cachedA.click();
+  expect(await page.evaluate(() => fixture.containerMessages.map(message => [message.subjectId, message.activeAccount]))).toEqual([
+    ['subject-b', true], ['subject-a', false],
+  ]);
+  expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport:id:subject-a:passport-catalog`])).toEqual(
+    await page.evaluate(() => fixture.passportA),
+  );
+});
+
+test('isolated personal identities keep their profiles and catalogs across account changes', async ({page}) => {
+  await page.goto(fixtureOrigin + '/tests/fixtures/native-tree.html?scenario=passport-real');
+  await expect(page.getByRole('link', {name: 'Personal selected', exact: true})).toBeVisible();
+  await page.evaluate(async () => {
+    browser.runtime = {getManifest: () => ({browser_specific_settings: {gecko: {id: 'synthetic@example.test'}}}), sendMessage: async () => null};
+    await browser.storage.local.set({useSessionContainers: true});
+  });
+  const profile = subject => `yc-power:${fixtureOrigin}:passport:id:${subject}:passport-profile`;
+  await expect.poll(() => page.evaluate(key => fixture.memory[key]?.subjectId, profile('synthetic-personal-user'))).toBe('synthetic-personal-user');
+  await page.evaluate(() => {
+    const script = [...document.scripts].find(script => script.textContent.startsWith('window.__DATA__'));
+    script.textContent = 'window.__DATA__ = {"user":{"isFederated":false,"id":"synthetic-personal-other","displayName":"Other account"}};';
+  });
+  await expect.poll(() => page.evaluate(key => fixture.memory[key]?.subjectId, profile('synthetic-personal-other'))).toBe('synthetic-personal-other');
+  expect(await page.evaluate(key => fixture.memory[key]?.subjectId, profile('synthetic-personal-user'))).toBe('synthetic-personal-user');
+  expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('synthetic-personal-user');
 });

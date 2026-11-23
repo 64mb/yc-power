@@ -1,17 +1,21 @@
 {
   "manifest_version": 2,
   "name": "YC Power",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "storage",
-    "https://console.yandex.cloud/*"
+    "https://console.yandex.cloud/*",
+    "contextualIdentities"
   ],
   "optional_permissions": [
-    "https://*/*"
+    "https://*/*",
+    "cookies"
   ],
   "background": {
     "scripts": [
+      "core.js",
+      "federation.js",
       "background.js"
     ]
   },

@@ -25,7 +25,7 @@ window.browser = {
         },
     }},
     extension: {getViews: () => scenario === 'options-popup' ? [window] : []},
-    runtime: {getURL: path => new URL(path, location.origin).href},
+    runtime: {getManifest: () => scenario === 'options-containers-firefox' ? {browser_specific_settings: {gecko: {id: 'synthetic@example.test'}}} : {}, getURL: path => new URL(path, location.origin).href},
     tabs: {create: async options => { fixture.tabs.push(structuredClone(options)); }},
     permissions: {
         request: async request => { fixture.requests.push(structuredClone(request)); return scenario !== 'options-denied'; },
