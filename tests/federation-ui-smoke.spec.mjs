@@ -879,3 +879,19 @@ test('isolated personal identities keep their profiles and catalogs across accou
   expect(await page.evaluate(key => fixture.memory[key]?.subjectId, profile('synthetic-personal-user'))).toBe('synthetic-personal-user');
   expect(await page.evaluate(() => fixture.memory[`yc-power:${location.origin}:passport-profile`]?.subjectId)).toBe('synthetic-personal-user');
 });
+
+test('Firefox container failure still opens resources in the active account', async ({page}) => {
+  for (const [name, path] of [['Active custom folder', '/clouds/cloud-alpha/folder-alpha'], ['Active custom cloud', '/clouds/cloud-alpha']]) {
+    await openFederations(page);
+    await page.evaluate(async () => {
+      browser.runtime = {
+        getManifest: () => ({browser_specific_settings: {gecko: {id: 'synthetic@example.test'}}}),
+        sendMessage: async () => { throw new Error('Container unavailable'); },
+      };
+      await browser.storage.local.set({useSessionContainers: true});
+    });
+    const navigation = page.waitForRequest(request => request.isNavigationRequest() && request.url() === fixtureOrigin + path);
+    await active(page).getByRole('link', {name, exact: true}).click();
+    await navigation;
+  }
+});

@@ -1146,20 +1146,28 @@ const cloudIcons = {cloud: Cloud, ...Object.fromEntries(Object.entries(folderIco
     event.preventDefault();
     const href = safeHref(item), route = Core.route(item.href, location.origin);
     const passport = cloudFederation(item) === null;
+    const active = activeCloud(item);
+    const sameTab = !modified && event.button === 0;
     if (!href || !route || route.id !== item.id || route.type !== item.type) return;
     try {
       const subjectId = passport ? passportDestinationSubject(item) : undefined;
       if (containers) {
         await flushPendingPreferences();
-        const result = await browser.runtime.sendMessage({type: 'yc-power:open-container', federationId: cloudFederation(item), subjectId, href: route.href, background: !event.shiftKey && (event.button === 1 || event.ctrlKey || event.metaKey), newTab: modified || event.button === 1, activeAccount: activeCloud(item)});
+        const result = await browser.runtime.sendMessage({type: 'yc-power:open-container', federationId: cloudFederation(item), subjectId, href: route.href, background: !event.shiftKey && (event.button === 1 || event.ctrlKey || event.metaKey), newTab: modified || event.button === 1, activeAccount: active});
         if (result?.opened) return;
-        if (activeCloud(item)) { location.assign(route.href); return; }
+        if (active) {
+          if (!stopped && canScanIdentity() && activeCloud(item)) location.assign(route.href);
+          return;
+        }
       }
       sessionStorage.setItem('yc-power:destination', JSON.stringify({federationId: cloudFederation(item), ...(subjectId ? {subjectId} : {}), href: route.href, expires: Date.now() + 300000}));
       await flushPendingPreferences();
       if (stopped) return;
       location.assign(href);
-    } catch { statusKey = 'saveFailed'; render(); }
+    } catch {
+      if (containers && active && sameTab && !stopped && canScanIdentity() && activeCloud(item)) { location.assign(route.href); return; }
+      statusKey = containers ? 'containerOpenFailed' : 'saveFailed'; render();
+    }
   }
   function Item({item, parent, draggable = false}) {
     const empty = item.type === 'cloud' && (activeCloud(item) ? hasNoFolders(item.id) : !item.folders.length);
