@@ -128,8 +128,10 @@ async function openContainer(message, sender) {
     if (typeof mapping[key] === 'string') {
         try { container = await browser.contextualIdentities.get(mapping[key]); } catch { /* recreate deleted containers */ }
     }
-    const color = await containerColor(stored[containerProfileKey(origin, id, message.subjectId)]);
-    if (container && container.color !== color) container = await browser.contextualIdentities.update(container.cookieStoreId, {color});
+    const color = await containerColor(stored[containerProfileKey(origin, id, message.subjectId)]).catch(() => 'blue');
+    if (container && container.color !== color) {
+        await browser.contextualIdentities.update(container.cookieStoreId, {color}).catch(() => {});
+    }
     if (!container) {
         container = await browser.contextualIdentities.create({name: id === null ? 'YC Power · personal' : 'YC Power · ' + id, color, icon: 'briefcase'});
         await browser.storage.local.set({_sessionContainers: {...mapping, [key]: container.cookieStoreId}});
